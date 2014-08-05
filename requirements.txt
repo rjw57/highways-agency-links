@@ -1,0 +1,6 @@
+# pip-friendly requirements list
+# use "pip install -r requirements.txt" to install
+
+git+https://git.csx.cam.ac.uk/x/eng-sigproc/u/rjw57/srf/trafficutils.git
+docopt
+
