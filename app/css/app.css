@@ -1,0 +1,19 @@
+#loadingBanner {
+  position: absolute; top: 0; bottom: 0; left: 0; right: 0;
+  background-color: #000;
+  color: #fff;
+}
+
+#loadingContent {
+  margin: auto;
+  position: absolute; top: 0; left: 0; bottom: 0; right: 0;
+}
+
+#map {
+  position: absolute; top: 0; bottom: 0; left: 0; right: 0;
+  transition: opacity 0.5s;
+  background-color: black;
+}
+
+.loading #map { opacity: 0; }
+

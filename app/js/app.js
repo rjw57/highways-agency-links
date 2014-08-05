@@ -1,43 +1,4 @@
-<!doctype html>
-<html>
-  <head>
-    <title>Highways Agency Published links</title>
-
-    <!-- Bower installed dependencies -->
-    <link rel="stylesheet" href="bower_components/leaflet/dist/leaflet.css" />
-    <script src="bower_components/leaflet/dist/leaflet.js"></script>
-    <script src="bower_components/jquery/dist/jquery.min.js"></script>
-    <script src="bower_components/tinycolor/tinycolor.js"></script>
-
-    <style>
-      #loadingBanner {
-        position: absolute; top: 0; bottom: 0; left: 0; right: 0;
-        background-color: #000;
-        color: #fff;
-      }
-
-      #loadingContent {
-        margin: auto;
-        position: absolute; top: 0; left: 0; bottom: 0; right: 0;
-      }
-
-      #map {
-        position: absolute; top: 0; bottom: 0; left: 0; right: 0;
-        transition: opacity 0.5s;
-        background-color: black;
-      }
-      .loading #map { opacity: 0; }
-    </style>
-  </head>
-
-  <body class="loading">
-    <div id="loadingBanner">
-      <img id="loadingContent" src="throbber.gif" alt="Loading...">
-    </div>
-    <div id="map" class="loading"></div>
-
-    <script>
-(function() {
+$(document).ready(function() {
   // create our leaflet map
   var map = L.map('map', {
     attributionControl: false,
@@ -80,7 +41,7 @@
       color: tinycolor({ h: 0, s: 75, v: 75 }).toHexString(),
       weight: 3,
       opacity: 1,
-    })
+    });
 
     // zoom to extent of links
     map.fitBounds(linksLayer.getBounds(), { padding: [10,10] });
@@ -96,7 +57,5 @@
     // clear loading
     $('body').removeClass('loading');
   });
-})();
-    </script>
-  </body>
-</html>
+});
+
