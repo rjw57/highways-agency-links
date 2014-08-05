@@ -23,6 +23,11 @@ import trafficutils.io
 def main():
     opts = docopt.docopt(__doc__)
     G = trafficutils.io.load_traffic_network(opts['<xmlfile>'])
+
+    print('Loaded links with {0} nodes and {1} edges'.format(
+        G.number_of_nodes(), G.size(),
+    ))
+
     features = []
 
     # Create node features
