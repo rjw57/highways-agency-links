@@ -11,7 +11,7 @@ $(document).ready(function() {
   L.control.scale().addTo(map);
 
   // use OSM base layer
-  var baseMap = L.tileLayer('http://otile{s}.mqcdn.com/tiles/1.0.0/map/{z}/{x}/{y}.jpg', {
+  var baseMap = L.tileLayer('//otile{s}-s.mqcdn.com/tiles/1.0.0/map/{z}/{x}/{y}.jpg', {
     subdomains: '1234',
     attribution: '© OpenStreetMap contributors',
     opacity: 0.5,
