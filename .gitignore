@@ -1,6 +1,6 @@
 *.pyc
-app/bower_components/
-dist/
-.tmp/
+app/bower_components
+dist
+.tmp
 app/links.json
-node_modules/
+node_modules
