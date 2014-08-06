@@ -14,7 +14,6 @@ $(document).ready(function() {
   var baseMap = L.tileLayer('//otile{s}-s.mqcdn.com/tiles/1.0.0/map/{z}/{x}/{y}.jpg', {
     subdomains: '1234',
     attribution: '© OpenStreetMap contributors',
-    opacity: 0.5,
   }).addTo(map);
 
   // kick off a request for our data
@@ -27,7 +26,7 @@ $(document).ready(function() {
       //  var props = feature.properties;
       //  return props._type === 'edge' && props._edgetype === 'link';
       //},
-      color: tinycolor({ h: 240, s: 75, v: 75 }).toHexString(),
+      color: tinycolor({ h: 240, s: 100, v: 75 }).toHexString(),
       weight: 5,
       opacity: 1,
     }).addTo(map);
@@ -38,7 +37,7 @@ $(document).ready(function() {
         var props = feature.properties;
         return props._type === 'edge' && props._edgetype !== 'link';
       },
-      color: tinycolor({ h: 0, s: 75, v: 75 }).toHexString(),
+      color: tinycolor({ h: 0, s: 100, v: 75 }).toHexString(),
       weight: 3,
       opacity: 1,
     });
