@@ -57,19 +57,6 @@ module.exports = function(grunt) {
       },
     },
 
-    // Download links.xml
-    curl: {
-      fetchlinks: {
-        src: '<%= conf.linksUrl %>',
-        dest: '.tmp/links.xml',
-      },
-    },
-
-    // Create links.json file
-    exec: {
-      convertlinks: 'python linksxml2geojson.py .tmp/links.xml app/links.json',
-    },
-
     clean: {
       dist: {
         files: [{
@@ -80,24 +67,14 @@ module.exports = function(grunt) {
     },
   });
 
-  grunt.registerTask('links', [
-      'curl:fetchlinks',
-      'exec:convertlinks',
-  ]);
-
-  grunt.registerTask('quickbuild', [
+  grunt.registerTask('build', [
+      'clean:dist',
       'copy:dist',
       'useminPrepare',
       'concat:generated',
       'uglify:generated',
       'cssmin:generated',
       'usemin',
-  ]);
-
-  grunt.registerTask('build', [
-      'clean:dist',
-      'links',
-      'quickbuild',
   ]);
 
   grunt.registerTask('default', ['build']);

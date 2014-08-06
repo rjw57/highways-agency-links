@@ -18,15 +18,15 @@ $(document).ready(function() {
   }).addTo(map);
 
   // kick off a request for our data
-  $.getJSON('links.json', function(data) {
+  $.getJSON('//realtime-traffic.appspot.com/links.json', function(data) {
     // add our GeoJSON layers
 
     // first the actual links
     var linksLayer = L.geoJson(data, {
-      filter: function(feature, layer) {
-        var props = feature.properties;
-        return props._type === 'edge' && props._edgetype === 'link';
-      },
+      //filter: function(feature, layer) {
+      //  var props = feature.properties;
+      //  return props._type === 'edge' && props._edgetype === 'link';
+      //},
       color: tinycolor({ h: 240, s: 75, v: 75 }).toHexString(),
       weight: 5,
       opacity: 1,
