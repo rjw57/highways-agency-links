@@ -108313,8 +108313,8 @@ DirectedGraph.prototype.contract = function(edgeId, node, edgeFactory) {
   this.removeEdge(edgeId);
 
   // Remove the old edge's nodes
-  this.removeNode(edge.nodes[0]);
-  this.removeNode(edge.nodes[1]);
+  if(this.hasNodeId(edge.nodes[0])) { this.removeNode(edge.nodes[0]); }
+  if(this.hasNodeId(edge.nodes[1])) { this.removeNode(edge.nodes[1]); }
 
   // Insert merged node and edges from in and out neighbours
   this.addNode(node);
@@ -108385,6 +108385,7 @@ DirectedGraph.prototype.nodeOutNeighbours = function(nodeId) {
   return neighbours;
 };
 
+// INPLACE! Grpah simplification. Work in progress.
 DirectedGraph.prototype.simplify = function(minimumLength, options) {
   var nNewNodes = 0, nNewEdges = 0;
 
@@ -108422,7 +108423,7 @@ DirectedGraph.prototype.simplify = function(minimumLength, options) {
     },
   }, options);
 
-  var self = this, G = self.copy();
+  var self = this, G = self;
 
   var simplifyStep = function() {
     var toRemove = [];
@@ -108538,20 +108539,44 @@ var haveNetwork = function(map, network) {
   console.log('Raw network has ' + G.order + ' node(s) and ' +
       G.size + ' edge(s)');
 
-  var collapsedG = G.simplify(100);
+  // Create sets of GeoJSON files for various resolutions
+  var maxResolution = 30, minResolution, geoJSONs = [],
+      getPos = function(n) { return n.data.pos; };
+  var G2 = G;
+  while(maxResolution < 1000) {
+    console.log(G2);
 
-  console.log('Collapsed network has ' + collapsedG.order +
-      ' node(s) and ' + collapsedG.size + ' edge(s)');
-  console.log(collapsedG);
+    geoJSONs.push({
+      minResolution: minResolution, maxResolution: maxResolution,
+      object: G2.edgesAsGeoJSON(getPos),
+    });
+    minResolution = maxResolution;
+    maxResolution = maxResolution * 3;
 
-  var collapsedGeoJSON = collapsedG.edgesAsGeoJSON(function(n) { return n.data.pos; });
-  console.log('GeoJSON:', collapsedGeoJSON);
+    G2 = G.copy().simplify(maxResolution * 5);
+  }
+  geoJSONs.push({
+    minResolution: minResolution,
+    object: G2.edgesAsGeoJSON(getPos),
+  });
 
-  map.addLayer(new ol.layer.Vector({
-    source: new ol.source.GeoJSON({
-      object: collapsedGeoJSON,
-    }),
-  }));
+  geoJSONs.forEach(function(gj) {
+    map.addLayer(new ol.layer.Vector({
+      source: new ol.source.GeoJSON({
+        object: gj.object,
+      }),
+      minResolution: gj.minResolution,
+      maxResolution: gj.maxResolution,
+    }));
+  });
+
+  console.log(geoJSONs);
+
+  //map.addLayer(new ol.layer.Vector({
+  //  source: new ol.source.GeoJSON({
+  //    object: collapsedGeoJSON,
+  //  }),
+  //}));
 };
 
 $(document).ready(function() {
@@ -108574,6 +108599,10 @@ $(document).ready(function() {
       center: ol.proj.transform([-0.09, 51.505], 'EPSG:4326', 'EPSG:3857'),
       zoom: 11,
     }),
+  });
+
+  map.getView().on('change:resolution', function(event) {
+    console.log('Resolution change', event.target.getResolution());
   });
 
   /*
