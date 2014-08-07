@@ -38,20 +38,44 @@ var haveNetwork = function(map, network) {
   console.log('Raw network has ' + G.order + ' node(s) and ' +
       G.size + ' edge(s)');
 
-  var collapsedG = G.simplify(100);
+  // Create sets of GeoJSON files for various resolutions
+  var maxResolution = 30, minResolution, geoJSONs = [],
+      getPos = function(n) { return n.data.pos; };
+  var G2 = G;
+  while(maxResolution < 1000) {
+    console.log(G2);
 
-  console.log('Collapsed network has ' + collapsedG.order +
-      ' node(s) and ' + collapsedG.size + ' edge(s)');
-  console.log(collapsedG);
+    geoJSONs.push({
+      minResolution: minResolution, maxResolution: maxResolution,
+      object: G2.edgesAsGeoJSON(getPos),
+    });
+    minResolution = maxResolution;
+    maxResolution = maxResolution * 3;
 
-  var collapsedGeoJSON = collapsedG.edgesAsGeoJSON(function(n) { return n.data.pos; });
-  console.log('GeoJSON:', collapsedGeoJSON);
+    G2 = G.copy().simplify(maxResolution * 5);
+  }
+  geoJSONs.push({
+    minResolution: minResolution,
+    object: G2.edgesAsGeoJSON(getPos),
+  });
 
-  map.addLayer(new ol.layer.Vector({
-    source: new ol.source.GeoJSON({
-      object: collapsedGeoJSON,
-    }),
-  }));
+  geoJSONs.forEach(function(gj) {
+    map.addLayer(new ol.layer.Vector({
+      source: new ol.source.GeoJSON({
+        object: gj.object,
+      }),
+      minResolution: gj.minResolution,
+      maxResolution: gj.maxResolution,
+    }));
+  });
+
+  console.log(geoJSONs);
+
+  //map.addLayer(new ol.layer.Vector({
+  //  source: new ol.source.GeoJSON({
+  //    object: collapsedGeoJSON,
+  //  }),
+  //}));
 };
 
 $(document).ready(function() {
@@ -74,6 +98,10 @@ $(document).ready(function() {
       center: ol.proj.transform([-0.09, 51.505], 'EPSG:4326', 'EPSG:3857'),
       zoom: 11,
     }),
+  });
+
+  map.getView().on('change:resolution', function(event) {
+    console.log('Resolution change', event.target.getResolution());
   });
 
   /*

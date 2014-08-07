@@ -212,8 +212,8 @@ DirectedGraph.prototype.contract = function(edgeId, node, edgeFactory) {
   this.removeEdge(edgeId);
 
   // Remove the old edge's nodes
-  this.removeNode(edge.nodes[0]);
-  this.removeNode(edge.nodes[1]);
+  if(this.hasNodeId(edge.nodes[0])) { this.removeNode(edge.nodes[0]); }
+  if(this.hasNodeId(edge.nodes[1])) { this.removeNode(edge.nodes[1]); }
 
   // Insert merged node and edges from in and out neighbours
   this.addNode(node);
@@ -284,6 +284,7 @@ DirectedGraph.prototype.nodeOutNeighbours = function(nodeId) {
   return neighbours;
 };
 
+// INPLACE! Grpah simplification. Work in progress.
 DirectedGraph.prototype.simplify = function(minimumLength, options) {
   var nNewNodes = 0, nNewEdges = 0;
 
@@ -321,7 +322,7 @@ DirectedGraph.prototype.simplify = function(minimumLength, options) {
     },
   }, options);
 
-  var self = this, G = self.copy();
+  var self = this, G = self;
 
   var simplifyStep = function() {
     var toRemove = [];
