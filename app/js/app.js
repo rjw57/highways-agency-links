@@ -47,7 +47,7 @@ var haveNetwork = function(map, network) {
   // Create sets of GeoJSON files for various resolutions
   var maxResolution = 30, minResolution, geoJSONs = [],
       getPos = function(n) { return n.data.pos; };
-  while(maxResolution < 3000) {
+  while(maxResolution < 1000) {
     console.log(G);
 
     geoJSONs.push({
@@ -57,7 +57,7 @@ var haveNetwork = function(map, network) {
 
     minResolution = maxResolution;
     maxResolution = maxResolution * 3;
-    G = G.copy().simplify(maxResolution);
+    G = G.copy().simplify(10 * maxResolution);
   }
   geoJSONs.push({
     minResolution: minResolution,
