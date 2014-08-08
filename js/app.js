@@ -108967,9 +108967,6 @@ var haveNetwork = function(map, network) {
 };
 
 $(document).ready(function() {
-  // HACK!
-  $('body').removeClass('loading');
-
   // Are we WebGL capable?
   console.log('Have WebGL:', ol.BrowserFeature.HAS_WEBGL);
 
@@ -108995,6 +108992,7 @@ $(document).ready(function() {
   // kick off a request for the traffic network
   $.getJSON(DATA_SERVER + 'network.json', function(data) {
     haveNetwork(map, data);
+    $('body').removeClass('loading');
   });
 });
 
