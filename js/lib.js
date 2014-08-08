@@ -109364,26 +109364,22 @@ DirectedGraph.prototype.edgesAsGeoJSON = function(nodePosFunc) {
   var features = [], edge, coords,
       featureCollection = { type: 'FeatureCollection', features: features };
 
+  var lineStrings = []
   for(var edgeId in this.edgeMap) {
     edge = this.edgeMap[edgeId];
-
-    coords = [
+    lineStrings.push([
       nodePosFunc(this.getNodeById(edge.nodes[0])),
       nodePosFunc(this.getNodeById(edge.nodes[1])),
-    ];
-
-    features.push({
-      type: 'Feature',
-      id: edge.id,
-      geometry: {
-        type: 'LineString',
-        coordinates: coords
-      },
-      properties: edge.data,
-    });
+    ]);
   }
 
-  return featureCollection;
+  return {
+    type: 'Feature',
+    geometry: {
+      type: 'MultiLineString',
+      coordinates: lineStrings,
+    },
+  };
 };
 
 return DirectedGraph;
