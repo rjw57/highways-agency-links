@@ -171,45 +171,43 @@ DirectedGraph.prototype.removeNode = function(nodeId) {
 // the ids of the from and to nodes.
 DirectedGraph.prototype.contract = function(edgeId, node, edgeFactory) {
   var self = this, edge = this.edgeMap[edgeId], inNodes = [], outNodes = [],
-    edgesToRemove = [];
+    edgesToRemove = [], edgesToAdd;
 
   if(!edge) {
     throw new Error('Edge id ' + edgeId + ' is not in the graph.');
   }
 
-  // Add the new node to the graph.
-  this.addNode(node);
+  // Remove original edge
+  this.removeEdge(edgeId);
 
   // Get combined list of in and out neighbouring nodes.
   inNodes = [];
   this.nodeInNeighbours(edge.nodes[0]).forEach(function(nId) {
-    if((nId !== edge.nodes[1]) && (inNodes.indexOf(nId) === -1)) { inNodes.push(nId); }
+    if(inNodes.indexOf(nId) === -1) { inNodes.push(nId); }
   });
   this.nodeInNeighbours(edge.nodes[1]).forEach(function(nId) {
-    if((nId !== edge.nodes[0]) && (inNodes.indexOf(nId) === -1)) { inNodes.push(nId); }
+    if(inNodes.indexOf(nId) === -1) { inNodes.push(nId); }
   });
 
   outNodes = [];
   this.nodeOutNeighbours(edge.nodes[0]).forEach(function(nId) {
-    if((nId !== edge.nodes[1]) && (outNodes.indexOf(nId) === -1)) { outNodes.push(nId); }
+    if(outNodes.indexOf(nId) === -1) { outNodes.push(nId); }
   });
   this.nodeOutNeighbours(edge.nodes[1]).forEach(function(nId) {
-    if((nId !== edge.nodes[0]) && (outNodes.indexOf(nId) === -1)) { outNodes.push(nId); }
+    if(outNodes.indexOf(nId) === -1) { outNodes.push(nId); }
   });
 
   // Remove in and out edges
-  edgesToRemove = [].concat(
-      this.nodeEdges(edge.nodes[0]),
-      this.nodeEdges(edge.nodes[1])
-  );
+  edgesToRemove = [];
+  this.nodeEdges(edge.nodes[0]).forEach(function(edgeId) {
+    if(edgesToRemove.indexOf(edgeId) === -1) { edgesToRemove.push(edgeId); }
+  });
+  this.nodeEdges(edge.nodes[1]).forEach(function(edgeId) {
+    if(edgesToRemove.indexOf(edgeId) === -1) { edgesToRemove.push(edgeId); }
+  });
   edgesToRemove.forEach(function(e) {
-    if(e === edgeId) { return; }
-    if(!self.hasEdgeId(e)) { return; } // HACK
     self.removeEdge(e);
   });
-
-  // Remove the old edge
-  this.removeEdge(edgeId);
 
   // Remove the old edge's nodes
   if(this.hasNodeId(edge.nodes[0])) { this.removeNode(edge.nodes[0]); }
@@ -219,8 +217,17 @@ DirectedGraph.prototype.contract = function(edgeId, node, edgeFactory) {
   this.addNode(node);
 
   // Insert edges
-  inNodes.forEach(function(n) { self.addEdge(edgeFactory(n, node.id)); });
-  outNodes.forEach(function(n) { self.addEdge(edgeFactory(node.id, n)); });
+  edgesToAdd = [];
+  inNodes.forEach(function(n) {
+    if(self.hasNodeId(n)) { edgesToAdd.push(edgeFactory(self, n, node.id)); } });
+  outNodes.forEach(function(n) {
+    if(self.hasNodeId(n)) { edgesToAdd.push(edgeFactory(self, node.id, n)); } });
+  edgesToAdd.forEach(function(e) { self.addEdge(e); });
+
+  var addedEdges = [];
+  edgesToAdd.forEach(function(e) { addedEdges.push(e.id); });
+
+  return { removed: edgesToRemove, added: addedEdges };
 };
 
 // Get {node, edge} {object, index} by id
@@ -284,7 +291,7 @@ DirectedGraph.prototype.nodeOutNeighbours = function(nodeId) {
   return neighbours;
 };
 
-// INPLACE! Grpah simplification. Work in progress.
+// INPLACE graph simplification. Work in progress.
 DirectedGraph.prototype.simplify = function(minimumLength, options) {
   var nNewNodes = 0, nNewEdges = 0;
 
@@ -294,15 +301,16 @@ DirectedGraph.prototype.simplify = function(minimumLength, options) {
     lengthFunc: function(edge) { return edge.data[options.edgeLengthField]; },
 
     mergedNodeIdPrefix: 'mergedNode',
-    mergedNodeFunc: function(edge, nodes) {
+    mergedNodeFunc: function(graph, edge, nodes) {
       var p1 = nodes[0].data[options.nodePositionField],
           p2 = nodes[1].data[options.nodePositionField],
-          newNode;
+          newNode, newNodeId;
 
-      newNode = {
-        id: options.mergedNodeIdPrefix + (++nNewNodes),
-        data: { },
-      };
+      do {
+        newNodeId = options.mergedNodeIdPrefix + (++nNewNodes);
+      } while(graph.hasNodeId(newNodeId));
+
+      newNode = { id: newNodeId, data: { } };
 
       newNode.data[options.nodePositionField] = [
         0.5 * (p1[0] + p2[0]), 0.5 * (p1[1] + p2[1])
@@ -322,47 +330,56 @@ DirectedGraph.prototype.simplify = function(minimumLength, options) {
     },
   }, options);
 
-  var self = this, G = self;
+  var self = this, nextEdge, collapseResult, edge, idx, mergedNode;
 
-  var simplifyStep = function() {
-    var toRemove = [];
+  // Keep a Heap of edges sorted by length
+  var heap = new Heap(function(a,b) { return a.len - b.len; });
 
-    // Form list of potential edges to collapse
-    toRemove = [];
-    G.getEdges().forEach(function(edge) {
-      if(options.lengthFunc(edge) < minimumLength) { toRemove.push(edge.id); }
-    });
+  // Add all graph edges to heap
+  self.getEdges().forEach(function(e) {
+    heap.push({ id: e.id, len: options.lengthFunc(e) });
+  });
 
-    if(toRemove.length === 0) { return false; }
+  var edgeFactory = function(graph, n1, n2) {
+    var p1 = graph.getNodeById(n1).data.pos,
+        p2 = graph.getNodeById(n2).data.pos,
+        dx = p2[0]-p1[0], dy = p2[1]-p1[1],
+        newId;
 
-    // Remove edges skipping edges which have already been removed by contraction
-    // or which are now too long.
-    toRemove.forEach(function(edgeId) {
-      if(!G.hasEdgeId(edgeId)) { return; }
-      if(options.lengthFunc(G.getEdgeById(edgeId)) >= minimumLength) { return; }
+    do {
+      newId = 'newEdge' + (++nNewEdges);
+    } while(graph.hasEdgeId(newId));
 
-      var edge = G.getEdgeById(edgeId),
-          mergedNode = options.mergedNodeFunc(edge,
-            [G.getNodeById(edge.nodes[0]), G.getNodeById(edge.nodes[1])]);
-
-      G.contract(edgeId, mergedNode, function(n1, n2) {
-        var p1 = G.getNodeById(n1).data.pos,
-            p2 = G.getNodeById(n2).data.pos,
-            dx = p2[0]-p1[0], dy = p2[1]-p1[1];
-
-        return {
-          id: 'newEdge' + (++nNewEdges), nodes: [n1, n2],
-          data: { length: Math.sqrt(dx*dx + dy*dy) },
-        };
-      });
-    });
-
-    return true;
+    return {
+      id: newId, nodes: [n1, n2],
+      data: { length: Math.sqrt(dx*dx + dy*dy) },
+    };
   };
 
-  while(simplifyStep()) { /* iterate */ }
+  // Keep contracting edges until none smaller than minimumLength
+  while(true) {
+    nextEdge = heap.pop();
 
-  return G;
+    // skip edges which are no longer in the graph
+    if(!self.hasEdgeId(nextEdge.id)) { continue; }
+
+    // stop when we get a long enough edge
+    if(nextEdge.len >= minimumLength) { break; }
+
+    // collapse edge
+    edge = self.getEdgeById(nextEdge.id);
+    mergedNode = options.mergedNodeFunc(self, edge,
+        [self.getNodeById(edge.nodes[0]), self.getNodeById(edge.nodes[1])]);
+    collapseResult = self.contract(nextEdge.id, mergedNode, edgeFactory);
+
+    // add new edges to heap
+    for(idx=0; idx<collapseResult.added.length; ++idx) {
+      edge = self.getEdgeById(collapseResult.added[idx]);
+      heap.push({ id: edge.id, len: options.lengthFunc(edge) });
+    }
+  }
+
+  return self;
 };
 
 // Construct a GeoJSON representation of the graph edges as a GeoJSON
