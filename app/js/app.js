@@ -74,7 +74,7 @@ var haveNetwork = function(map, network) {
 
     minResolution = maxResolution;
     maxResolution = maxResolution * 3;
-    G = G.copy().simplify(maxResolution);
+    G = G.copy().simplify(8 * maxResolution);
   }
   networks.push({
     minResolution: minResolution, graph: G, tree: networkToRBush(G),
