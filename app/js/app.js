@@ -12,6 +12,24 @@ var DATA_SERVER = '//trafficdata-realtimetraffic.rhcloud.com/data/';
 // Uncomment for testing
 // DATA_SERVER = 'http://localhost:5000/data/';
 
+var networkToRBush = function(network) {
+  var items = [];
+  network.getEdges().forEach(function(edge) {
+    var p1 = network.getNodeById(edge.nodes[0]).data.pos,
+        p2 = network.getNodeById(edge.nodes[1]).data.pos;
+
+    items.push([
+      Math.min(p1[0], p2[0]), Math.min(p1[1], p2[1]),
+      Math.max(p1[0], p2[0]), Math.max(p1[1], p2[1]),
+      edge.id,
+    ]);
+  });
+
+  var tree = rbush();
+  tree.load(items);
+  return tree;
+};
+
 var haveNetwork = function(map, network) {
   console.log(network);
   // A list of node and edge objects to construct the DirectedGraph
@@ -51,7 +69,7 @@ var haveNetwork = function(map, network) {
 
     networks.push({
       minResolution: minResolution, maxResolution: maxResolution,
-      network: G,
+      graph: G, tree: networkToRBush(G),
     });
 
     minResolution = maxResolution;
@@ -59,21 +77,53 @@ var haveNetwork = function(map, network) {
     G = G.copy().simplify(10 * maxResolution);
   }
   networks.push({
-    minResolution: minResolution, network: G,
+    minResolution: minResolution, graph: G, tree: networkToRBush(G),
   });
 
   console.log('Final network has ' + G.order + ' node(s) and ' +
       G.size + ' edge(s)');
 
+  map.on('postcompose', function(event) {
+    var res = map.getView().getResolution(), tree, graph;
+    networks.forEach(function(n) {
+      if(n.minResolution && (res < n.minResolution)) { return; }
+      if(n.maxResolution && (res > n.maxResolution)) { return; }
+      tree = n.tree; graph = n.graph;
+    });
+
+    if(!tree || !graph) { return; }
+
+    var lineStrings = [];
+    tree.search(event.frameState.extent).forEach(function(link) {
+      var edge = graph.getEdgeById(link[4]),
+          p1 = graph.getNodeById(edge.nodes[0]).data.pos,
+          p2 = graph.getNodeById(edge.nodes[1]).data.pos;
+      lineStrings.push([ p1, p2 ]);
+    });
+
+    event.vectorContext.setFillStrokeStyle(
+      new ol.style.Fill(),
+      new ol.style.Stroke({
+        color: [255,0,0,1],
+        width: 3,
+      })
+    );
+    event.vectorContext.drawMultiLineStringGeometry(
+      new ol.geom.MultiLineString(lineStrings), null);
+  });
+  map.render();
+
+  /*
   networks.forEach(function(network) {
     map.addLayer(new ol.layer.Vector({
       source: new ol.source.GeoJSON({
-        object: network.network.edgesAsGeoJSON(function(n) { return n.data.pos }),
+        object: network.graph.edgesAsGeoJSON(function(n) { return n.data.pos }),
       }),
       minResolution: network.minResolution,
       maxResolution: network.maxResolution,
     }));
   });
+  */
 };
 
 $(document).ready(function() {
@@ -86,7 +136,7 @@ $(document).ready(function() {
     // renderer: ['webgl', 'canvas', 'dom'],
     layers: [
       new ol.layer.Tile({
-        source: new ol.source.MapQuest({layer: 'sat'}),
+        source: new ol.source.MapQuest({layer: 'osm'}),
       }),
     ],
     view: new ol.View({
