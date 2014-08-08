@@ -7,7 +7,7 @@
 var LINK_COLOUR = tinycolor({ h: 240, s: 100, v: 75 }).toHexString(),
     SRC_SINK_COLOUR = tinycolor({ h: 0, s: 100, v: 75 }).toHexString();
 
-var DATA_SERVER = '//trafficdata-realtimetraffic.rhcloud.com/';
+var DATA_SERVER = '//trafficdata-realtimetraffic.rhcloud.com/data/';
 
 // Uncomment for testing
 // DATA_SERVER = 'http://localhost:8051/';
