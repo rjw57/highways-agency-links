@@ -65,6 +65,26 @@ module.exports = function(grunt) {
         }],
       },
     },
+
+    watch: {
+      source: {
+        files: ['<%= conf.app %>/**/*'],
+        tasks: ['build'],
+        options: {
+          livereload: true,
+        },
+      },
+    },
+
+    connect: {
+      server: {
+        options: {
+          livereload: true,
+          base: '<%= conf.dist %>',
+          port: 8080,
+        },
+      },
+    },
   });
 
   grunt.registerTask('build', [
@@ -78,4 +98,10 @@ module.exports = function(grunt) {
   ]);
 
   grunt.registerTask('default', ['build']);
+
+  grunt.registerTask('serve', [
+    'build',
+    'connect:server',
+    'watch',
+  ]);
 }
