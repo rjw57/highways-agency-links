@@ -74,7 +74,7 @@ var haveNetwork = function(map, network) {
 
     minResolution = maxResolution;
     maxResolution = maxResolution * 3;
-    G = G.copy().simplify(10 * maxResolution);
+    G = G.copy().simplify(maxResolution);
   }
   networks.push({
     minResolution: minResolution, graph: G, tree: networkToRBush(G),
@@ -145,9 +145,11 @@ $(document).ready(function() {
     }),
   });
 
+  /*
   map.getView().on('change:resolution', function(event) {
     console.log('Resolution change', event.target.getResolution());
   });
+  */
 
   // kick off a request for the traffic network
   $.getJSON(DATA_SERVER + 'network.json', function(data) {
