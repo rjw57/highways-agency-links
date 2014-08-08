@@ -10,7 +10,7 @@ var LINK_COLOUR = tinycolor({ h: 240, s: 100, v: 75 }).toHexString(),
 var DATA_SERVER = '//trafficdata-realtimetraffic.rhcloud.com/data/';
 
 // Uncomment for testing
-// DATA_SERVER = 'http://localhost:8051/';
+// DATA_SERVER = 'http://localhost:5000/data/';
 
 var haveNetwork = function(map, network) {
   console.log(network);
