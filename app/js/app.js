@@ -7,26 +7,32 @@
 var LINK_COLOUR = tinycolor({ h: 240, s: 100, v: 75 }).toHexString(),
     SRC_SINK_COLOUR = tinycolor({ h: 0, s: 100, v: 75 }).toHexString();
 
+var DATA_SERVER = '//trafficdata-realtimetraffic.rhcloud.com/';
+
+// Uncomment for testing
+// DATA_SERVER = 'http://localhost:8051/';
+
 var haveNetwork = function(map, network) {
+  console.log(network);
   // A list of node and edge objects to construct the DirectedGraph
   var nodes = [], edges = [];
 
   // Project each of the nodes into the map co-ordinate projection
   var srcProjection = 'EPSG:4326', dstProjection = 'EPSG:3857';
-  network.nodes.forEach(function(n, nIdx) {
+  network.graph.nodes.forEach(function(n, nIdx) {
     if(!n.pos) { return; }
     n.pos = ol.proj.transform(n.pos, srcProjection, dstProjection);
     nodes.push({ id: 'Node' + nIdx, data: n });
   });
 
   // Now, using the projected nodes, work out the length of each edge.
-  network.edges.forEach(function(e, eIdx) {
-    var u = network.nodes[e.nodes[0]], v = network.nodes[e.nodes[1]];
+  network.graph.links.forEach(function(e, eIdx) {
+    var u = network.graph.nodes[e.source], v = network.graph.nodes[e.target];
     var dx = v.pos[0] - u.pos[0], dy = v.pos[1] - v.pos[1];
     e.length = Math.sqrt(dx*dx + dy*dy);
     edges.push({
       id: 'Edge' + eIdx,
-      nodes: [ 'Node' + e.nodes[0], 'Node' + e.nodes[1] ],
+      nodes: [ 'Node' + e.source, 'Node' + e.target ],
       data: e,
     });
   });
@@ -124,13 +130,8 @@ $(document).ready(function() {
   */
 
   // kick off a request for the traffic network
-  $.getJSON('//realtime-traffic.appspot.com/data/network.json', function(data) {
+  $.getJSON(DATA_SERVER + 'network.json', function(data) {
     haveNetwork(map, data);
-  });
-
-  // kick off a request for our data
-  $.getJSON('//realtime-traffic.appspot.com/data/links.geojson', function(data) {
-      // haveLinksGeoJSON(map, data);
   });
 
   /*
