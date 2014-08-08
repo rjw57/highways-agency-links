@@ -44,40 +44,36 @@ var haveNetwork = function(map, network) {
   console.log('Raw network has ' + G.order + ' node(s) and ' +
       G.size + ' edge(s)');
 
-  // Create sets of GeoJSON files for various resolutions
-  var maxResolution = 30, minResolution, geoJSONs = [],
-      getPos = function(n) { return n.data.pos; };
+  // Create networks for various resolutions
+  var maxResolution = 30, minResolution, networks = [];
   while(maxResolution < 1000) {
     console.log(G);
 
-    geoJSONs.push({
+    networks.push({
       minResolution: minResolution, maxResolution: maxResolution,
-      object: G.edgesAsGeoJSON(getPos),
+      network: G,
     });
 
     minResolution = maxResolution;
     maxResolution = maxResolution * 3;
     G = G.copy().simplify(10 * maxResolution);
   }
-  geoJSONs.push({
-    minResolution: minResolution,
-    object: G.edgesAsGeoJSON(getPos),
+  networks.push({
+    minResolution: minResolution, network: G,
   });
 
   console.log('Final network has ' + G.order + ' node(s) and ' +
       G.size + ' edge(s)');
 
-  geoJSONs.forEach(function(gj) {
+  networks.forEach(function(network) {
     map.addLayer(new ol.layer.Vector({
       source: new ol.source.GeoJSON({
-        object: gj.object,
+        object: network.network.edgesAsGeoJSON(function(n) { return n.data.pos }),
       }),
-      minResolution: gj.minResolution,
-      maxResolution: gj.maxResolution,
+      minResolution: network.minResolution,
+      maxResolution: network.maxResolution,
     }));
   });
-
-  console.log(geoJSONs);
 };
 
 $(document).ready(function() {
