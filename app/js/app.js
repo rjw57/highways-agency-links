@@ -104,7 +104,11 @@ $(document).ready(function() {
             occupancy = data.data.occupancies[edge.data.id];
 
         // Do we have data for this link?
-        colour = (speed === undefined) ? [128, 128, 128, 1] : speed2color(speed.value);
+        colour = (speed === undefined) ?
+          [128, 128, 128, 1] : redGreen(speed.value, 120);
+        //colour = (occupancy === undefined) ?
+        //  [128, 128, 128, 1] : redGreen(100-occupancy.value, 100);
+
         vectorContext.setFillStrokeStyle(
           new ol.style.Fill(),
           new ol.style.Stroke({
@@ -152,11 +156,9 @@ $(document).ready(function() {
 
 // utility functions
 
-function speed2color(speed) {
-  var maxSpeed = 120 /*kmh*/,
-      lambda = Math.max(0, Math.min(1, speed / maxSpeed)),
+function redGreen(x, maxX) {
+  var lambda = Math.max(0, Math.min(1, x / maxX)),
       s = Math.sin(lambda*0.5*Math.PI);
-
   return [255*(1-s*s), 255*(s*s), 0, 1];
 }
 
