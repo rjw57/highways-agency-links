@@ -353,19 +353,23 @@ DirectedGraph.prototype.simplify = function(minimumLength, options) {
         p2 = graph.getNodeById(n2).data.pos,
         dx = p2[0]-p1[0], dy = p2[1]-p1[1],
         keepLen = options.lengthFunc(oldEdges[0]),
-        keepId = oldEdges[0].id;
+        keepEdge = oldEdges[0], newData;
 
     // Keep the id of the longest edge
     oldEdges.forEach(function(e) {
       var l = options.lengthFunc(e);
       if(l > keepLen) {
-        keepLen = l; keepId = e.id;
+        keepLen = l; keepEdge = e;
       }
     });
 
+    newData = _extend({}, keepEdge.data);
+    newData.length = Math.sqrt(dx*dx + dy*dy);
+
     return [{
-      id: keepId, nodes: [n1, n2],
-      data: { length: Math.sqrt(dx*dx + dy*dy) },
+      id: keepEdge.id,
+      nodes: [n1, n2],
+      data: newData,
     }];
   };
 
