@@ -63,7 +63,7 @@ $(document).ready(function() {
     var cache = {};
 
     var imageElement = document.createElement('img');
-    imageElement.src = 'img/car.png';
+    imageElement.src = 'img/car-blue.png';
 
     map.on('postcompose', function(event) {
       var vectorContext = event.vectorContext, frameState = event.frameState,
