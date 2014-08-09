@@ -46,7 +46,7 @@ module.exports = function(grunt) {
           expand: true,
           cwd: '<%= conf.app %>',
           dest: '<%= conf.dist %>',
-          src: ['*.html', '*.{gif,png,jpg}', '*.json', 'js/*', 'css/*', ],
+          src: ['*.html', '*.{gif,png,jpg}', '*.json', 'js/*', 'css/*', 'img/*', ],
         }, {
           // For leaflet
           expand: true,
