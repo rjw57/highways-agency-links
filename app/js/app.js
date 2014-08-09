@@ -62,16 +62,13 @@ $(document).ready(function() {
   fetchData.then(function(data) {
     var cache = {};
 
+    var imageElement = document.createElement('img');
+    imageElement.src = 'img/car.png';
+
     map.on('postcompose', function(event) {
       var vectorContext = event.vectorContext, frameState = event.frameState,
           extent = frameState.extent, res = map.getView().getResolution(), tree, graph,
-          spacing = 20*res;
-
-      var imageStyle = new ol.style.Circle({
-          radius: 5, snapToPixel: false,
-          fill: new ol.style.Fill({color: 'yellow'}),
-          stroke: new ol.style.Stroke({color: 'red', width: 1})
-      });
+          carLength = 30, spacing = 2*carLength*res;
 
       // Do we have this extent cached so we don't need to do a spatial search?
       if(!cache.extent ||
@@ -91,7 +88,7 @@ $(document).ready(function() {
         cache.visibleLinks = cache.tree.search(frameState.extent);
       }
 
-      var pointCoords = [], lineStrings = [];
+      var pointCoords = [], lineString = [], colour;
 
       cache.visibleLinks.forEach(function(link) {
         var edge = cache.graph.getEdgeById(link[4]),
@@ -100,37 +97,52 @@ $(document).ready(function() {
             delta = [p2[0]-p1[0], p2[1]-p1[1]],
             deltaLen = Math.sqrt(delta[0]*delta[0] + delta[1]*delta[1]),
             unitDelta = [delta[0]/deltaLen, delta[1]/deltaLen],
+            rotation = Math.atan2(unitDelta[1], unitDelta[0]),
             lambda, offset;
 
         var speed = data.data.speeds[edge.data.id],
             occupancy = data.data.occupancies[edge.data.id];
 
         // Do we have data for this link?
-        if((speed === undefined) || (occupancy === undefined)) {
-          // no, use line
-          lineStrings.push([ p1, p2 ]);
-        } else {
-          offset = (speed.value / 100) * frameState.time / 1000;
-          offset -= Math.floor(offset);
-          for(lambda = offset*spacing; lambda < deltaLen; lambda += spacing) {
+        colour = (speed === undefined) ? [128, 128, 128, 1] : speed2color(speed.value);
+        vectorContext.setFillStrokeStyle(
+          new ol.style.Fill(),
+          new ol.style.Stroke({
+            color: colour,
+            width: 3,
+          })
+        );
+
+        // draw line
+        lineString = [ p1, p2 ];
+        vectorContext.drawLineStringGeometry(new ol.geom.LineString(lineString), null);
+
+        // Do we have the information for car icons?
+        if((speed !== undefined) && (occupancy !== undefined)) {
+          spacing = Math.min(10, (100/occupancy.value)) * res * carLength;
+          offset = res * (speed.value / 10) * frameState.time / 1000;
+          offset -= spacing * Math.floor(offset/spacing);
+
+          pointCoords = [];
+          for(lambda = offset; lambda < deltaLen; lambda += spacing) {
             pointCoords.push([ p1[0] + unitDelta[0]*lambda, p1[1] + unitDelta[1]*lambda, ]);
           }
-          // todo points
+
+          var imageStyle = new ol.style.Icon({
+              anchor: [0.5, 0.5],
+              rotation: - rotation + 0.5 * Math.PI,
+              rotateWithView: true,
+              snapToPixel: false,
+              img: imageElement,
+              scale: carLength / 100,
+              size: [50,100],
+          });
+
+          vectorContext.setImageStyle(imageStyle);
+          vectorContext.drawMultiPointGeometry(
+              new ol.geom.MultiPoint(pointCoords), null);
         }
       });
-
-      vectorContext.setImageStyle(imageStyle);
-      vectorContext.drawMultiPointGeometry(
-          new ol.geom.MultiPoint(pointCoords), null);
-      vectorContext.setFillStrokeStyle(
-        new ol.style.Fill(),
-        new ol.style.Stroke({
-          color: [255,0,0,1],
-          width: 3,
-        })
-      );
-      vectorContext.drawMultiLineStringGeometry(
-        new ol.geom.MultiLineString(lineStrings), null);
 
       map.render();
     });
@@ -139,6 +151,14 @@ $(document).ready(function() {
 });
 
 // utility functions
+
+function speed2color(speed) {
+  var maxSpeed = 120 /*kmh*/,
+      lambda = Math.max(0, Math.min(1, speed / maxSpeed)),
+      s = Math.sin(lambda*0.5*Math.PI);
+
+  return [255*(1-s*s), 255*(s*s), 0, 1];
+}
 
 function _extend(obj, otherObj) {
   if(!obj) { return obj; }
