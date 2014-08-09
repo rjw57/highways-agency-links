@@ -13,9 +13,7 @@ var DATA_SERVER = '//trafficdata-realtimetraffic.rhcloud.com/data/';
 // DATA_SERVER = 'http://localhost:5000/data/';
 
 // ///// GLOBAL STATE /////
-var TRAFFIC_DATA = {
-  speeds: null, flows: null,
-};
+var TRAFFIC_DATA = { };
 
 var networkToRBush = function(network) {
   var items = [];
@@ -88,18 +86,78 @@ var haveNetwork = function(map, network) {
   console.log('Final network has ' + G.order + ' node(s) and ' +
       G.size + ' edge(s)');
 
-  map.on('postcompose', function(event) {
-    console.log(TRAFFIC_DATA);
+  var cache = { };
 
-    var res = map.getView().getResolution(), tree, graph;
-    networks.forEach(function(n) {
-      if(n.minResolution && (res < n.minResolution)) { return; }
-      if(n.maxResolution && (res > n.maxResolution)) { return; }
-      tree = n.tree; graph = n.graph;
+  map.on('postcompose', function(event) {
+    var vectorContext = event.vectorContext,
+        frameState = event.frameState,
+        extent = frameState.extent,
+        res = map.getView().getResolution(), tree, graph,
+        spacing = 20*res;
+
+    var imageStyle = new ol.style.Circle({
+        radius: 5,
+        snapToPixel: false,
+        fill: new ol.style.Fill({color: 'yellow'}),
+        stroke: new ol.style.Stroke({color: 'red', width: 1})
     });
 
-    if(!tree || !graph) { return; }
+    // Do we have this extent cached so we don't need to do a spatial search?
+    if(!cache.extent ||
+        (extent[0] !== cache.extent[0]) ||
+        (extent[1] !== cache.extent[1]) ||
+        (extent[2] !== cache.extent[2]) ||
+        (extent[3] !== cache.extent[3]))
+    {
+      cache.extent = extent;
+      cache.tree = null; cache.graph = null;
 
+      networks.forEach(function(n) {
+        if(n.minResolution && (res < n.minResolution)) { return; }
+        if(n.maxResolution && (res > n.maxResolution)) { return; }
+        cache.tree = n.tree; cache.graph = n.graph;
+      });
+
+      if(!cache.tree || !cache.graph) { return; }
+      cache.visibleLinks = cache.tree.search(frameState.extent);
+    }
+
+    var pointCoords = [], lineStrings = [];
+
+    cache.visibleLinks.forEach(function(link) {
+      var edge = cache.graph.getEdgeById(link[4]),
+          p1 = cache.graph.getNodeById(edge.nodes[0]).data.pos,
+          p2 = cache.graph.getNodeById(edge.nodes[1]).data.pos,
+          delta = [p2[0]-p1[0], p2[1]-p1[1]],
+          deltaLen = Math.sqrt(delta[0]*delta[0] + delta[1]*delta[1]),
+          unitDelta = [delta[0]/deltaLen, delta[1]/deltaLen],
+          lambda, offset;
+
+      var speed = TRAFFIC_DATA.speeds[edge.data.id],
+          occupancy = TRAFFIC_DATA.occupancies[edge.data.id];
+
+      // Do we have data for this link?
+      if((speed === undefined) || (occupancy === undefined)) {
+        // no, use line
+        lineStrings.push([ p1, p2 ]);
+      } else {
+        offset = (speed / 100) * frameState.time / 1000;
+        offset -= Math.floor(offset);
+        for(lambda = offset*spacing; lambda < deltaLen; lambda += spacing) {
+          pointCoords.push([
+            p1[0] + unitDelta[0]*lambda,
+            p1[1] + unitDelta[1]*lambda,
+          ]);
+        }
+        // todo points
+      }
+    });
+
+    vectorContext.setImageStyle(imageStyle);
+    vectorContext.drawMultiPointGeometry(
+        new ol.geom.MultiPoint(pointCoords), null);
+
+    /*
     var lineStrings = [];
     tree.search(event.frameState.extent).forEach(function(link) {
       var edge = graph.getEdgeById(link[4]),
@@ -107,16 +165,19 @@ var haveNetwork = function(map, network) {
           p2 = graph.getNodeById(edge.nodes[1]).data.pos;
       lineStrings.push([ p1, p2 ]);
     });
+    */
 
-    event.vectorContext.setFillStrokeStyle(
+    vectorContext.setFillStrokeStyle(
       new ol.style.Fill(),
       new ol.style.Stroke({
         color: [255,0,0,1],
         width: 3,
       })
     );
-    event.vectorContext.drawMultiLineStringGeometry(
+    vectorContext.drawMultiLineStringGeometry(
       new ol.geom.MultiLineString(lineStrings), null);
+
+    map.render();
   });
   map.render();
 
@@ -173,11 +234,11 @@ $(document).ready(function() {
     map.render();
   });
 
-  // kick off a request for the flows
-  $.getJSON(DATA_SERVER + 'flows.json', function(data) {
-    TRAFFIC_DATA.flows = data;
+  // kick off a request for the occupancies
+  $.getJSON(DATA_SERVER + 'occupancies.json', function(data) {
+    TRAFFIC_DATA.occupancies = data;
     data.data.forEach(function(datum) {
-      TRAFFIC_DATA.flows[datum.location] = datum.value;
+      TRAFFIC_DATA.occupancies[datum.location] = datum.value;
     });
     map.render();
   });
