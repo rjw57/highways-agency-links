@@ -64,7 +64,7 @@ var haveNetwork = function(map, network) {
 
   // Create networks for various resolutions
   var maxResolution = 30, minResolution, networks = [];
-  while(maxResolution < 1000) {
+  while(maxResolution < 800) {
     console.log(G);
 
     networks.push({
