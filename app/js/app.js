@@ -115,7 +115,7 @@ $(document).ready(function() {
           // no, use line
           lineStrings.push([ p1, p2 ]);
         } else {
-          offset = (speed / 100) * frameState.time / 1000;
+          offset = (speed.value / 100) * frameState.time / 1000;
           offset -= Math.floor(offset);
           for(lambda = offset*spacing; lambda < deltaLen; lambda += spacing) {
             pointCoords.push([ p1[0] + unitDelta[0]*lambda, p1[1] + unitDelta[1]*lambda, ]);
@@ -157,11 +157,11 @@ function createFetchDataPromise() {
     ['speeds', 'flows', 'occupancies'].forEach(function(type) {
       var map = {};
       data.data[type].forEach(function(datum) {
-        map[datum.location] = datum.value;
+        map[datum.location] = { when: new Date(datum.when), value: datum.value };
       });
       rv[type] = map;
     });
-    return rv;
+    return { data: rv, metadata: data.metadata, generated: data.generated };
   });
 
   return Promise.all([fetchLinks, simplify, fetchData])
@@ -169,7 +169,13 @@ function createFetchDataPromise() {
     return {
       graph: vs[0],
       simplified: vs[1],
-      data: vs[2],
+      data: vs[2].data,
+      timestamps: {
+        data: {
+          published: new Date(vs[2].metadata.publicationtime),
+          generated: new Date(vs[2].generated),
+        },
+      },
     };
   });
 }
