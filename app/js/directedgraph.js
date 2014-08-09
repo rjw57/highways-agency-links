@@ -170,64 +170,72 @@ DirectedGraph.prototype.removeNode = function(nodeId) {
 // edge with node. Create new edges using edgeFactory function which is passed
 // the ids of the from and to nodes.
 DirectedGraph.prototype.contract = function(edgeId, node, edgeFactory) {
-  var self = this, edge = this.edgeMap[edgeId], inNodes = [], outNodes = [],
-    edgesToRemove = [], edgesToAdd;
+  var self = this, edge = self.getEdgeById(edgeId);
 
   if(!edge) {
     throw new Error('Edge id ' + edgeId + ' is not in the graph.');
   }
 
-  // Remove original edge
-  this.removeEdge(edgeId);
+  // Remove the original edge
+  self.removeEdge(edgeId);
 
-  // Get combined list of in and out neighbouring nodes.
-  inNodes = [];
-  this.nodeInNeighbours(edge.nodes[0]).forEach(function(nId) {
-    if(inNodes.indexOf(nId) === -1) { inNodes.push(nId); }
-  });
-  this.nodeInNeighbours(edge.nodes[1]).forEach(function(nId) {
-    if(inNodes.indexOf(nId) === -1) { inNodes.push(nId); }
-  });
+  // Insert the replacement node
+  self.addNode(node);
 
-  outNodes = [];
-  this.nodeOutNeighbours(edge.nodes[0]).forEach(function(nId) {
-    if(outNodes.indexOf(nId) === -1) { outNodes.push(nId); }
-  });
-  this.nodeOutNeighbours(edge.nodes[1]).forEach(function(nId) {
-    if(outNodes.indexOf(nId) === -1) { outNodes.push(nId); }
-  });
+  var removedEdges = [];
 
-  // Remove in and out edges
-  edgesToRemove = [];
-  this.nodeEdges(edge.nodes[0]).forEach(function(edgeId) {
-    if(edgesToRemove.indexOf(edgeId) === -1) { edgesToRemove.push(edgeId); }
-  });
-  this.nodeEdges(edge.nodes[1]).forEach(function(edgeId) {
-    if(edgesToRemove.indexOf(edgeId) === -1) { edgesToRemove.push(edgeId); }
-  });
-  edgesToRemove.forEach(function(e) {
-    self.removeEdge(e);
-  });
+  // Construct a map of out edge objects keyed by target node id and remove them.
+  var outEdges = {};
+  self.nodeOutEdges(edge.nodes[0])
+    .concat(self.nodeOutEdges(edge.nodes[1]))
+    .forEach(function(outEdgeId) {
+      var outEdge = self.getEdgeById(outEdgeId),
+          record = outEdges[outEdge.nodes[1]];
 
-  // Remove the old edge's nodes
-  if(this.hasNodeId(edge.nodes[0])) { this.removeNode(edge.nodes[0]); }
-  if(this.hasNodeId(edge.nodes[1])) { this.removeNode(edge.nodes[1]); }
+      if(record) {
+        record.push(outEdge);
+      } else {
+        outEdges[outEdge.nodes[1]] = [outEdge];
+      }
 
-  // Insert merged node and edges from in and out neighbours
-  this.addNode(node);
+      removedEdges.push(outEdge);
+      self.removeEdge(outEdge.id);
+    });
 
-  // Insert edges
-  edgesToAdd = [];
-  inNodes.forEach(function(n) {
-    if(self.hasNodeId(n)) { edgesToAdd.push(edgeFactory(self, n, node.id)); } });
-  outNodes.forEach(function(n) {
-    if(self.hasNodeId(n)) { edgesToAdd.push(edgeFactory(self, node.id, n)); } });
-  edgesToAdd.forEach(function(e) { self.addEdge(e); });
+  // Construct a map of in edge objects keyed by source node id and remove them.
+  var inEdges = {};
+  self.nodeInEdges(edge.nodes[0])
+    .concat(self.nodeInEdges(edge.nodes[1]))
+    .forEach(function(inEdgeId) {
+      var inEdge = self.getEdgeById(inEdgeId),
+          record = inEdges[inEdge.nodes[0]];
 
-  var addedEdges = [];
-  edgesToAdd.forEach(function(e) { addedEdges.push(e.id); });
+      if(record) {
+        record.push(inEdge);
+      } else {
+        inEdges[inEdge.nodes[0]] = [inEdge];
+      }
 
-  return { removed: edgesToRemove, added: addedEdges };
+      removedEdges.push(inEdge);
+      self.removeEdge(inEdge.id);
+    });
+
+  // For each in and out neighbour node, construct replacement edge(s).
+  var addedEdgeIds = [];
+  for(var outNodeId in outEdges) {
+    edgeFactory(self, node.id, outNodeId, outEdges[outNodeId])
+      .forEach(function(e) { addedEdgeIds.push(e.id); self.addEdge(e); } );
+  }
+  for(var inNodeId in inEdges) {
+    edgeFactory(self, inNodeId, node.id, inEdges[inNodeId])
+      .forEach(function(e) { addedEdgeIds.push(e.id); self.addEdge(e); } );
+  }
+
+  // Remove the original edge's nodes if they now have degree 0
+  if(self.degree(edge.nodes[0]) === 0) { self.removeNode(edge.nodes[0]); }
+  if(self.degree(edge.nodes[1]) === 0) { self.removeNode(edge.nodes[1]); }
+
+  return { removedEdges: removedEdges, addedEdgeIds: addedEdgeIds };
 };
 
 // Get {node, edge} {object, index} by id
@@ -340,20 +348,25 @@ DirectedGraph.prototype.simplify = function(minimumLength, options) {
     heap.push({ id: e.id, len: options.lengthFunc(e) });
   });
 
-  var edgeFactory = function(graph, n1, n2) {
+  var edgeFactory = function(graph, n1, n2, oldEdges) {
     var p1 = graph.getNodeById(n1).data.pos,
         p2 = graph.getNodeById(n2).data.pos,
         dx = p2[0]-p1[0], dy = p2[1]-p1[1],
-        newId;
+        keepLen = options.lengthFunc(oldEdges[0]),
+        keepId = oldEdges[0].id;
 
-    do {
-      newId = 'newEdge' + (++nNewEdges);
-    } while(graph.hasEdgeId(newId));
+    // Keep the id of the longest edge
+    oldEdges.forEach(function(e) {
+      var l = options.lengthFunc(e);
+      if(l > keepLen) {
+        keepLen = l; keepId = e.id;
+      }
+    });
 
-    return {
-      id: newId, nodes: [n1, n2],
+    return [{
+      id: keepId, nodes: [n1, n2],
       data: { length: Math.sqrt(dx*dx + dy*dy) },
-    };
+    }];
   };
 
   // Keep contracting edges until none smaller than minimumLength
@@ -373,8 +386,8 @@ DirectedGraph.prototype.simplify = function(minimumLength, options) {
     collapseResult = self.contract(nextEdge.id, mergedNode, edgeFactory);
 
     // add new edges to heap
-    for(idx=0; idx<collapseResult.added.length; ++idx) {
-      edge = self.getEdgeById(collapseResult.added[idx]);
+    for(idx=0; idx<collapseResult.addedEdgeIds.length; ++idx) {
+      edge = self.getEdgeById(collapseResult.addedEdgeIds[idx]);
       heap.push({ id: edge.id, len: options.lengthFunc(edge) });
     }
   }
