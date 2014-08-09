@@ -12,6 +12,11 @@ var DATA_SERVER = '//trafficdata-realtimetraffic.rhcloud.com/data/';
 // Uncomment for testing
 // DATA_SERVER = 'http://localhost:5000/data/';
 
+// ///// GLOBAL STATE /////
+var TRAFFIC_DATA = {
+  speeds: null, flows: null,
+};
+
 var networkToRBush = function(network) {
   var items = [];
   network.getEdges().forEach(function(edge) {
@@ -84,6 +89,8 @@ var haveNetwork = function(map, network) {
       G.size + ' edge(s)');
 
   map.on('postcompose', function(event) {
+    console.log(TRAFFIC_DATA);
+
     var res = map.getView().getResolution(), tree, graph;
     networks.forEach(function(n) {
       if(n.minResolution && (res < n.minResolution)) { return; }
@@ -155,6 +162,24 @@ $(document).ready(function() {
   $.getJSON(DATA_SERVER + 'network.json', function(data) {
     haveNetwork(map, data);
     $('body').removeClass('loading');
+  });
+
+  // kick off a request for the speeds
+  $.getJSON(DATA_SERVER + 'speeds.json', function(data) {
+    TRAFFIC_DATA.speeds = {};
+    data.data.forEach(function(datum) {
+      TRAFFIC_DATA.speeds[datum.location] = datum.value;
+    });
+    map.render();
+  });
+
+  // kick off a request for the flows
+  $.getJSON(DATA_SERVER + 'flows.json', function(data) {
+    TRAFFIC_DATA.flows = data;
+    data.data.forEach(function(datum) {
+      TRAFFIC_DATA.flows[datum.location] = datum.value;
+    });
+    map.render();
   });
 });
 
