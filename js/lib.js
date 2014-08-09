@@ -109286,6 +109286,8 @@ DirectedGraph.prototype.simplify = function(minimumLength, options) {
     mergedNodeFunc: function(graph, edge, nodes) {
       var p1 = nodes[0].data[options.nodePositionField],
           p2 = nodes[1].data[options.nodePositionField],
+          d1 = graph.degree(nodes[0].id),
+          d2 = graph.degree(nodes[1].id),
           newNode, newNodeId;
 
       do {
@@ -109294,8 +109296,11 @@ DirectedGraph.prototype.simplify = function(minimumLength, options) {
 
       newNode = { id: newNodeId, data: { } };
 
+      // The new position is a weighed average using the nodes' degrees as
+      // weights. The raitionale is that high-degree nodes need to stay closer
+      // to where they originally were.
       newNode.data[options.nodePositionField] = [
-        0.5 * (p1[0] + p2[0]), 0.5 * (p1[1] + p2[1])
+        (d1*p1[0] + d2*p2[0]) / (d1+d2), (d1*p1[1] + d2*p2[1]) / (d1+d2)
       ];
 
       return newNode;

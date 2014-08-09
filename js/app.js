@@ -204,7 +204,12 @@ $(document).ready(function() {
     // renderer: ['webgl', 'canvas', 'dom'],
     layers: [
       new ol.layer.Tile({
-        source: new ol.source.MapQuest({layer: 'osm'}),
+        //source: new ol.source.MapQuest({layer: 'osm'}),
+        source: new ol.source.BingMaps({
+          key: 'AvsuiJVtmn-zxz7hjF_DnAI7PGecNnzJFsNi7V69yd0BUdWYNlyetZblBtnRUcEI',
+          imagerySet: 'Aerial',
+          //layer: 'osm'
+        }),
       }),
     ],
     view: new ol.View({
