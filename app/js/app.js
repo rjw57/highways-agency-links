@@ -150,18 +150,21 @@ function createFetchDataPromise() {
   // Simplify network
   var simplify = createSimplifyPromise(fetchLinks);
 
-  // Data promises
-  var dataTypes = ['speeds', 'flows', 'occupancies'],
-      dataPromises = dataTypes.map(createFetchTrafficDataPromise),
-      allDataPromise = Promise.all(dataPromises).then(function(dataSets) {
-        var rv = {};
-        dataSets.forEach(function(ds) {
-          rv[ds.type] = ds.data;
-        });
-        return rv;
+  // Fetch data and munge into a useful form
+  var fetchData = createGetJSONPromise(DATA_SERVER + 'traffic_data.json')
+  .then(function(data) {
+    var rv = {};
+    ['speeds', 'flows', 'occupancies'].forEach(function(type) {
+      var map = {};
+      data.data[type].forEach(function(datum) {
+        map[datum.location] = datum.value;
       });
+      rv[type] = map;
+    });
+    return rv;
+  });
 
-  return Promise.all([fetchLinks, simplify, allDataPromise])
+  return Promise.all([fetchLinks, simplify, fetchData])
   .then(function(vs) {
     return {
       graph: vs[0],
