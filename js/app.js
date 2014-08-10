@@ -214,8 +214,9 @@ $(document).ready(function() {
 
 function redGreen(x, maxX) {
   var lambda = Math.max(0, Math.min(1, x / maxX)),
-      s = Math.sin(lambda*0.5*Math.PI);
-  return [255*(1-s*s), 255*(s*s), 0, 1];
+      g = Math.min(1, 2*lambda),
+      r = Math.min(2, 2-2*lambda);
+  return [255*r, 255*g, 0, 1];
 }
 
 function _extend(obj, otherObj) {
