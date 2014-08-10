@@ -25,9 +25,9 @@ var RealtimeTrafficData = {};
 //      occupancies: <Object>?,   // map link ids -> occupancy
 //    },
 //  }
-RealtimeTrafficData.createFetchDataPromise = function() {
+RealtimeTrafficData.createFetchDataPromise = function(options) {
   // Fetch links network
-  var fetchLinks = createFetchLinksPromise();
+  var fetchLinks = createFetchLinksPromise(options);
 
   // Simplify network
   var simplify = createSimplifyPromise(fetchLinks);
@@ -71,21 +71,92 @@ function createSimplifyPromise(fetchLinks) {
     while(maxResolution < 800) {
       rv.push({
         minResolution: minResolution, maxResolution: maxResolution,
-        graph: G, tree: graphToTree(G),
+        graph: G,
+        tree: graphToTree(G),
       });
 
       minResolution = maxResolution;
       maxResolution = maxResolution * 3;
-      G = G.copy().simplify(8 * maxResolution);
+      G = G.copy().simplify(30 * minResolution);
     }
 
     rv.push({
-      minResolution: minResolution, graph: G, tree: graphToTree(G),
+      minResolution: minResolution,
+      graph: G,
+      tree: graphToTree(G),
     });
 
     return rv;
   });
-};
+}
+
+function inflate(G, dist) {
+  // Form an array of node locations and an array of node ids
+  var locs = [], ids = [];
+  G.getNodes().forEach(function(n) {
+    locs.push(n.data.pos); ids.push(n.id);
+  });
+
+  var tree = createKDTree(locs),  // Create a kd-tree
+      clusters = [],              // List of clusters
+      queue = [],                 // Queue of points to check
+
+      // Processed flag for each point
+      processed = locs.map(function() { return false; });
+
+  // For each point, P
+  for(var pIdx = 0; pIdx < locs.length; pIdx++) {
+    // Skip if processed
+    if(processed[pIdx]) { continue; }
+
+    // Add P to queue
+    queue = [ pIdx ];
+
+    // For each point in queue
+    for(var qIdx = 0; qIdx < queue.length; qIdx++) {
+      // Search for neighbours dist away from point qIdx
+      tree.rnn(locs[queue[qIdx]], dist, function(nIdx) {
+        // Has this point been processed? If not, add to queue
+        if(!processed[nIdx]) {
+          queue.push(nIdx);
+          processed[nIdx] = true;
+        }
+      });
+    }
+    // queue is new cluster
+    clusters.push(queue);
+  }
+  console.log(locs.length + ' nodes -> ' + clusters.length + ' clusters or max radius ' + dist);
+
+  // Project out each cluster
+  clusters.forEach(function(pIdxs) {
+    // Calculate centre of mass of cluster
+    var com = [0,0];
+    pIdxs.forEach(function(pIdx) {
+      com[0] += locs[pIdx][0];
+      com[1] += locs[pIdx][1];
+    });
+    com[0] /= pIdxs.length; com[1] /= pIdxs.length;
+
+    // project out
+    pIdxs.forEach(function(pIdx) {
+      var dx = locs[pIdx][0] - com[0], dy = locs[pIdx][1] - com[1],
+          deltaLen = Math.sqrt(dx*dx + dy*dy);
+
+      // Don't touch single-point clusters
+      if(deltaLen === 0) { return; }
+
+      var newLoc = [ com[0] + dist*dx/deltaLen, com[1] + dist*dy/deltaLen ];
+
+      if(isNaN(newLoc[0])) {
+        console.log(com, dx, dy, deltaLen, newLoc);
+      }
+      G.getNodeById(ids[pIdx]).data.pos = newLoc;
+    });
+  });
+
+  return G;
+}
 
 function createFetchTrafficDataPromise(type) {
   var url = DATA_SERVER + type + '.json';
@@ -102,7 +173,7 @@ function createFetchTrafficDataPromise(type) {
 function createFetchLinksPromise(options) {
   options = _extend({
     srcProjection: 'EPSG:4326', destProjection: 'EPSG:3857',
-  }, options);
+  }, options || {});
 
   return createGetJSONPromise(DATA_SERVER + 'network.json')
   .then(function(network) {

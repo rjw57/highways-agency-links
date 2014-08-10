@@ -1,3 +1,5448 @@
+!function(e){if("object"==typeof exports)module.exports=e();else if("function"==typeof define&&define.amd)define(e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.proj4=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(_dereq_,module,exports){
+var mgrs = _dereq_('mgrs');
+
+function Point(x, y, z) {
+  if (!(this instanceof Point)) {
+    return new Point(x, y, z);
+  }
+  if (Array.isArray(x)) {
+    this.x = x[0];
+    this.y = x[1];
+    this.z = x[2] || 0.0;
+  }else if(typeof x === 'object'){
+    this.x = x.x;
+    this.y = x.y;
+    this.z = x.z || 0.0;
+  } else if (typeof x === 'string' && typeof y === 'undefined') {
+    var coords = x.split(',');
+    this.x = parseFloat(coords[0], 10);
+    this.y = parseFloat(coords[1], 10);
+    this.z = parseFloat(coords[2], 10) || 0.0;
+  }
+  else {
+    this.x = x;
+    this.y = y;
+    this.z = z || 0.0;
+  }
+  console.warn('proj4.Point will be removed in version 3, use proj4.toPoint');
+}
+
+Point.fromMGRS = function(mgrsStr) {
+  return new Point(mgrs.toPoint(mgrsStr));
+};
+Point.prototype.toMGRS = function(accuracy) {
+  return mgrs.forward([this.x, this.y], accuracy);
+};
+module.exports = Point;
+},{"mgrs":66}],2:[function(_dereq_,module,exports){
+var parseCode = _dereq_("./parseCode");
+var extend = _dereq_('./extend');
+var projections = _dereq_('./projections');
+var deriveConstants = _dereq_('./deriveConstants');
+
+function Projection(srsCode,callback) {
+  if (!(this instanceof Projection)) {
+    return new Projection(srsCode);
+  }
+  callback = callback || function(error){
+    if(error){
+      throw error;
+    }
+  };
+  var json = parseCode(srsCode);
+  if(typeof json !== 'object'){
+    callback(srsCode);
+    return;
+  }
+  var modifiedJSON = deriveConstants(json);
+  var ourProj = Projection.projections.get(modifiedJSON.projName);
+  if(ourProj){
+    extend(this, modifiedJSON);
+    extend(this, ourProj);
+    this.init();
+    callback(null, this);
+  }else{
+    callback(srsCode);
+  }
+}
+Projection.projections = projections;
+Projection.projections.start();
+module.exports = Projection;
+
+},{"./deriveConstants":32,"./extend":33,"./parseCode":36,"./projections":38}],3:[function(_dereq_,module,exports){
+module.exports = function(crs, denorm, point) {
+  var xin = point.x,
+    yin = point.y,
+    zin = point.z || 0.0;
+  var v, t, i;
+  for (i = 0; i < 3; i++) {
+    if (denorm && i === 2 && point.z === undefined) {
+      continue;
+    }
+    if (i === 0) {
+      v = xin;
+      t = 'x';
+    }
+    else if (i === 1) {
+      v = yin;
+      t = 'y';
+    }
+    else {
+      v = zin;
+      t = 'z';
+    }
+    switch (crs.axis[i]) {
+    case 'e':
+      point[t] = v;
+      break;
+    case 'w':
+      point[t] = -v;
+      break;
+    case 'n':
+      point[t] = v;
+      break;
+    case 's':
+      point[t] = -v;
+      break;
+    case 'u':
+      if (point[t] !== undefined) {
+        point.z = v;
+      }
+      break;
+    case 'd':
+      if (point[t] !== undefined) {
+        point.z = -v;
+      }
+      break;
+    default:
+      //console.log("ERROR: unknow axis ("+crs.axis[i]+") - check definition of "+crs.projName);
+      return null;
+    }
+  }
+  return point;
+};
+
+},{}],4:[function(_dereq_,module,exports){
+var HALF_PI = Math.PI/2;
+var sign = _dereq_('./sign');
+
+module.exports = function(x) {
+  return (Math.abs(x) < HALF_PI) ? x : (x - (sign(x) * Math.PI));
+};
+},{"./sign":21}],5:[function(_dereq_,module,exports){
+var TWO_PI = Math.PI * 2;
+var sign = _dereq_('./sign');
+
+module.exports = function(x) {
+  return (Math.abs(x) < Math.PI) ? x : (x - (sign(x) * TWO_PI));
+};
+},{"./sign":21}],6:[function(_dereq_,module,exports){
+module.exports = function(x) {
+  if (Math.abs(x) > 1) {
+    x = (x > 1) ? 1 : -1;
+  }
+  return Math.asin(x);
+};
+},{}],7:[function(_dereq_,module,exports){
+module.exports = function(x) {
+  return (1 - 0.25 * x * (1 + x / 16 * (3 + 1.25 * x)));
+};
+},{}],8:[function(_dereq_,module,exports){
+module.exports = function(x) {
+  return (0.375 * x * (1 + 0.25 * x * (1 + 0.46875 * x)));
+};
+},{}],9:[function(_dereq_,module,exports){
+module.exports = function(x) {
+  return (0.05859375 * x * x * (1 + 0.75 * x));
+};
+},{}],10:[function(_dereq_,module,exports){
+module.exports = function(x) {
+  return (x * x * x * (35 / 3072));
+};
+},{}],11:[function(_dereq_,module,exports){
+module.exports = function(a, e, sinphi) {
+  var temp = e * sinphi;
+  return a / Math.sqrt(1 - temp * temp);
+};
+},{}],12:[function(_dereq_,module,exports){
+module.exports = function(ml, e0, e1, e2, e3) {
+  var phi;
+  var dphi;
+
+  phi = ml / e0;
+  for (var i = 0; i < 15; i++) {
+    dphi = (ml - (e0 * phi - e1 * Math.sin(2 * phi) + e2 * Math.sin(4 * phi) - e3 * Math.sin(6 * phi))) / (e0 - 2 * e1 * Math.cos(2 * phi) + 4 * e2 * Math.cos(4 * phi) - 6 * e3 * Math.cos(6 * phi));
+    phi += dphi;
+    if (Math.abs(dphi) <= 0.0000000001) {
+      return phi;
+    }
+  }
+
+  //..reportError("IMLFN-CONV:Latitude failed to converge after 15 iterations");
+  return NaN;
+};
+},{}],13:[function(_dereq_,module,exports){
+var HALF_PI = Math.PI/2;
+
+module.exports = function(eccent, q) {
+  var temp = 1 - (1 - eccent * eccent) / (2 * eccent) * Math.log((1 - eccent) / (1 + eccent));
+  if (Math.abs(Math.abs(q) - temp) < 1.0E-6) {
+    if (q < 0) {
+      return (-1 * HALF_PI);
+    }
+    else {
+      return HALF_PI;
+    }
+  }
+  //var phi = 0.5* q/(1-eccent*eccent);
+  var phi = Math.asin(0.5 * q);
+  var dphi;
+  var sin_phi;
+  var cos_phi;
+  var con;
+  for (var i = 0; i < 30; i++) {
+    sin_phi = Math.sin(phi);
+    cos_phi = Math.cos(phi);
+    con = eccent * sin_phi;
+    dphi = Math.pow(1 - con * con, 2) / (2 * cos_phi) * (q / (1 - eccent * eccent) - sin_phi / (1 - con * con) + 0.5 / eccent * Math.log((1 - con) / (1 + con)));
+    phi += dphi;
+    if (Math.abs(dphi) <= 0.0000000001) {
+      return phi;
+    }
+  }
+
+  //console.log("IQSFN-CONV:Latitude failed to converge after 30 iterations");
+  return NaN;
+};
+},{}],14:[function(_dereq_,module,exports){
+module.exports = function(e0, e1, e2, e3, phi) {
+  return (e0 * phi - e1 * Math.sin(2 * phi) + e2 * Math.sin(4 * phi) - e3 * Math.sin(6 * phi));
+};
+},{}],15:[function(_dereq_,module,exports){
+module.exports = function(eccent, sinphi, cosphi) {
+  var con = eccent * sinphi;
+  return cosphi / (Math.sqrt(1 - con * con));
+};
+},{}],16:[function(_dereq_,module,exports){
+var HALF_PI = Math.PI/2;
+module.exports = function(eccent, ts) {
+  var eccnth = 0.5 * eccent;
+  var con, dphi;
+  var phi = HALF_PI - 2 * Math.atan(ts);
+  for (var i = 0; i <= 15; i++) {
+    con = eccent * Math.sin(phi);
+    dphi = HALF_PI - 2 * Math.atan(ts * (Math.pow(((1 - con) / (1 + con)), eccnth))) - phi;
+    phi += dphi;
+    if (Math.abs(dphi) <= 0.0000000001) {
+      return phi;
+    }
+  }
+  //console.log("phi2z has NoConvergence");
+  return -9999;
+};
+},{}],17:[function(_dereq_,module,exports){
+var C00 = 1;
+var C02 = 0.25;
+var C04 = 0.046875;
+var C06 = 0.01953125;
+var C08 = 0.01068115234375;
+var C22 = 0.75;
+var C44 = 0.46875;
+var C46 = 0.01302083333333333333;
+var C48 = 0.00712076822916666666;
+var C66 = 0.36458333333333333333;
+var C68 = 0.00569661458333333333;
+var C88 = 0.3076171875;
+
+module.exports = function(es) {
+  var en = [];
+  en[0] = C00 - es * (C02 + es * (C04 + es * (C06 + es * C08)));
+  en[1] = es * (C22 - es * (C04 + es * (C06 + es * C08)));
+  var t = es * es;
+  en[2] = t * (C44 - es * (C46 + es * C48));
+  t *= es;
+  en[3] = t * (C66 - es * C68);
+  en[4] = t * es * C88;
+  return en;
+};
+},{}],18:[function(_dereq_,module,exports){
+var pj_mlfn = _dereq_("./pj_mlfn");
+var EPSLN = 1.0e-10;
+var MAX_ITER = 20;
+module.exports = function(arg, es, en) {
+  var k = 1 / (1 - es);
+  var phi = arg;
+  for (var i = MAX_ITER; i; --i) { /* rarely goes over 2 iterations */
+    var s = Math.sin(phi);
+    var t = 1 - es * s * s;
+    //t = this.pj_mlfn(phi, s, Math.cos(phi), en) - arg;
+    //phi -= t * (t * Math.sqrt(t)) * k;
+    t = (pj_mlfn(phi, s, Math.cos(phi), en) - arg) * (t * Math.sqrt(t)) * k;
+    phi -= t;
+    if (Math.abs(t) < EPSLN) {
+      return phi;
+    }
+  }
+  //..reportError("cass:pj_inv_mlfn: Convergence error");
+  return phi;
+};
+},{"./pj_mlfn":19}],19:[function(_dereq_,module,exports){
+module.exports = function(phi, sphi, cphi, en) {
+  cphi *= sphi;
+  sphi *= sphi;
+  return (en[0] * phi - cphi * (en[1] + sphi * (en[2] + sphi * (en[3] + sphi * en[4]))));
+};
+},{}],20:[function(_dereq_,module,exports){
+module.exports = function(eccent, sinphi) {
+  var con;
+  if (eccent > 1.0e-7) {
+    con = eccent * sinphi;
+    return ((1 - eccent * eccent) * (sinphi / (1 - con * con) - (0.5 / eccent) * Math.log((1 - con) / (1 + con))));
+  }
+  else {
+    return (2 * sinphi);
+  }
+};
+},{}],21:[function(_dereq_,module,exports){
+module.exports = function(x) {
+  return x<0 ? -1 : 1;
+};
+},{}],22:[function(_dereq_,module,exports){
+module.exports = function(esinp, exp) {
+  return (Math.pow((1 - esinp) / (1 + esinp), exp));
+};
+},{}],23:[function(_dereq_,module,exports){
+module.exports = function (array){
+  var out = {
+    x: array[0],
+    y: array[1]
+  };
+  if (array.length>2) {
+    out.z = array[2];
+  }
+  if (array.length>3) {
+    out.m = array[3];
+  }
+  return out;
+};
+},{}],24:[function(_dereq_,module,exports){
+var HALF_PI = Math.PI/2;
+
+module.exports = function(eccent, phi, sinphi) {
+  var con = eccent * sinphi;
+  var com = 0.5 * eccent;
+  con = Math.pow(((1 - con) / (1 + con)), com);
+  return (Math.tan(0.5 * (HALF_PI - phi)) / con);
+};
+},{}],25:[function(_dereq_,module,exports){
+exports.wgs84 = {
+  towgs84: "0,0,0",
+  ellipse: "WGS84",
+  datumName: "WGS84"
+};
+exports.ch1903 = {
+  towgs84: "674.374,15.056,405.346",
+  ellipse: "bessel",
+  datumName: "swiss"
+};
+exports.ggrs87 = {
+  towgs84: "-199.87,74.79,246.62",
+  ellipse: "GRS80",
+  datumName: "Greek_Geodetic_Reference_System_1987"
+};
+exports.nad83 = {
+  towgs84: "0,0,0",
+  ellipse: "GRS80",
+  datumName: "North_American_Datum_1983"
+};
+exports.nad27 = {
+  nadgrids: "@conus,@alaska,@ntv2_0.gsb,@ntv1_can.dat",
+  ellipse: "clrk66",
+  datumName: "North_American_Datum_1927"
+};
+exports.potsdam = {
+  towgs84: "606.0,23.0,413.0",
+  ellipse: "bessel",
+  datumName: "Potsdam Rauenberg 1950 DHDN"
+};
+exports.carthage = {
+  towgs84: "-263.0,6.0,431.0",
+  ellipse: "clark80",
+  datumName: "Carthage 1934 Tunisia"
+};
+exports.hermannskogel = {
+  towgs84: "653.0,-212.0,449.0",
+  ellipse: "bessel",
+  datumName: "Hermannskogel"
+};
+exports.ire65 = {
+  towgs84: "482.530,-130.596,564.557,-1.042,-0.214,-0.631,8.15",
+  ellipse: "mod_airy",
+  datumName: "Ireland 1965"
+};
+exports.rassadiran = {
+  towgs84: "-133.63,-157.5,-158.62",
+  ellipse: "intl",
+  datumName: "Rassadiran"
+};
+exports.nzgd49 = {
+  towgs84: "59.47,-5.04,187.44,0.47,-0.1,1.024,-4.5993",
+  ellipse: "intl",
+  datumName: "New Zealand Geodetic Datum 1949"
+};
+exports.osgb36 = {
+  towgs84: "446.448,-125.157,542.060,0.1502,0.2470,0.8421,-20.4894",
+  ellipse: "airy",
+  datumName: "Airy 1830"
+};
+exports.s_jtsk = {
+  towgs84: "589,76,480",
+  ellipse: 'bessel',
+  datumName: 'S-JTSK (Ferro)'
+};
+exports.beduaram = {
+  towgs84: '-106,-87,188',
+  ellipse: 'clrk80',
+  datumName: 'Beduaram'
+};
+exports.gunung_segara = {
+  towgs84: '-403,684,41',
+  ellipse: 'bessel',
+  datumName: 'Gunung Segara Jakarta'
+};
+exports.rnb72 = {
+  towgs84: "106.869,-52.2978,103.724,-0.33657,0.456955,-1.84218,1",
+  ellipse: "intl",
+  datumName: "Reseau National Belge 1972"
+};
+},{}],26:[function(_dereq_,module,exports){
+exports.MERIT = {
+  a: 6378137.0,
+  rf: 298.257,
+  ellipseName: "MERIT 1983"
+};
+exports.SGS85 = {
+  a: 6378136.0,
+  rf: 298.257,
+  ellipseName: "Soviet Geodetic System 85"
+};
+exports.GRS80 = {
+  a: 6378137.0,
+  rf: 298.257222101,
+  ellipseName: "GRS 1980(IUGG, 1980)"
+};
+exports.IAU76 = {
+  a: 6378140.0,
+  rf: 298.257,
+  ellipseName: "IAU 1976"
+};
+exports.airy = {
+  a: 6377563.396,
+  b: 6356256.910,
+  ellipseName: "Airy 1830"
+};
+exports.APL4 = {
+  a: 6378137,
+  rf: 298.25,
+  ellipseName: "Appl. Physics. 1965"
+};
+exports.NWL9D = {
+  a: 6378145.0,
+  rf: 298.25,
+  ellipseName: "Naval Weapons Lab., 1965"
+};
+exports.mod_airy = {
+  a: 6377340.189,
+  b: 6356034.446,
+  ellipseName: "Modified Airy"
+};
+exports.andrae = {
+  a: 6377104.43,
+  rf: 300.0,
+  ellipseName: "Andrae 1876 (Den., Iclnd.)"
+};
+exports.aust_SA = {
+  a: 6378160.0,
+  rf: 298.25,
+  ellipseName: "Australian Natl & S. Amer. 1969"
+};
+exports.GRS67 = {
+  a: 6378160.0,
+  rf: 298.2471674270,
+  ellipseName: "GRS 67(IUGG 1967)"
+};
+exports.bessel = {
+  a: 6377397.155,
+  rf: 299.1528128,
+  ellipseName: "Bessel 1841"
+};
+exports.bess_nam = {
+  a: 6377483.865,
+  rf: 299.1528128,
+  ellipseName: "Bessel 1841 (Namibia)"
+};
+exports.clrk66 = {
+  a: 6378206.4,
+  b: 6356583.8,
+  ellipseName: "Clarke 1866"
+};
+exports.clrk80 = {
+  a: 6378249.145,
+  rf: 293.4663,
+  ellipseName: "Clarke 1880 mod."
+};
+exports.clrk58 = {
+  a: 6378293.645208759,
+  rf: 294.2606763692654,
+  ellipseName: "Clarke 1858"
+};
+exports.CPM = {
+  a: 6375738.7,
+  rf: 334.29,
+  ellipseName: "Comm. des Poids et Mesures 1799"
+};
+exports.delmbr = {
+  a: 6376428.0,
+  rf: 311.5,
+  ellipseName: "Delambre 1810 (Belgium)"
+};
+exports.engelis = {
+  a: 6378136.05,
+  rf: 298.2566,
+  ellipseName: "Engelis 1985"
+};
+exports.evrst30 = {
+  a: 6377276.345,
+  rf: 300.8017,
+  ellipseName: "Everest 1830"
+};
+exports.evrst48 = {
+  a: 6377304.063,
+  rf: 300.8017,
+  ellipseName: "Everest 1948"
+};
+exports.evrst56 = {
+  a: 6377301.243,
+  rf: 300.8017,
+  ellipseName: "Everest 1956"
+};
+exports.evrst69 = {
+  a: 6377295.664,
+  rf: 300.8017,
+  ellipseName: "Everest 1969"
+};
+exports.evrstSS = {
+  a: 6377298.556,
+  rf: 300.8017,
+  ellipseName: "Everest (Sabah & Sarawak)"
+};
+exports.fschr60 = {
+  a: 6378166.0,
+  rf: 298.3,
+  ellipseName: "Fischer (Mercury Datum) 1960"
+};
+exports.fschr60m = {
+  a: 6378155.0,
+  rf: 298.3,
+  ellipseName: "Fischer 1960"
+};
+exports.fschr68 = {
+  a: 6378150.0,
+  rf: 298.3,
+  ellipseName: "Fischer 1968"
+};
+exports.helmert = {
+  a: 6378200.0,
+  rf: 298.3,
+  ellipseName: "Helmert 1906"
+};
+exports.hough = {
+  a: 6378270.0,
+  rf: 297.0,
+  ellipseName: "Hough"
+};
+exports.intl = {
+  a: 6378388.0,
+  rf: 297.0,
+  ellipseName: "International 1909 (Hayford)"
+};
+exports.kaula = {
+  a: 6378163.0,
+  rf: 298.24,
+  ellipseName: "Kaula 1961"
+};
+exports.lerch = {
+  a: 6378139.0,
+  rf: 298.257,
+  ellipseName: "Lerch 1979"
+};
+exports.mprts = {
+  a: 6397300.0,
+  rf: 191.0,
+  ellipseName: "Maupertius 1738"
+};
+exports.new_intl = {
+  a: 6378157.5,
+  b: 6356772.2,
+  ellipseName: "New International 1967"
+};
+exports.plessis = {
+  a: 6376523.0,
+  rf: 6355863.0,
+  ellipseName: "Plessis 1817 (France)"
+};
+exports.krass = {
+  a: 6378245.0,
+  rf: 298.3,
+  ellipseName: "Krassovsky, 1942"
+};
+exports.SEasia = {
+  a: 6378155.0,
+  b: 6356773.3205,
+  ellipseName: "Southeast Asia"
+};
+exports.walbeck = {
+  a: 6376896.0,
+  b: 6355834.8467,
+  ellipseName: "Walbeck"
+};
+exports.WGS60 = {
+  a: 6378165.0,
+  rf: 298.3,
+  ellipseName: "WGS 60"
+};
+exports.WGS66 = {
+  a: 6378145.0,
+  rf: 298.25,
+  ellipseName: "WGS 66"
+};
+exports.WGS7 = {
+  a: 6378135.0,
+  rf: 298.26,
+  ellipseName: "WGS 72"
+};
+exports.WGS84 = {
+  a: 6378137.0,
+  rf: 298.257223563,
+  ellipseName: "WGS 84"
+};
+exports.sphere = {
+  a: 6370997.0,
+  b: 6370997.0,
+  ellipseName: "Normal Sphere (r=6370997)"
+};
+},{}],27:[function(_dereq_,module,exports){
+exports.greenwich = 0.0; //"0dE",
+exports.lisbon = -9.131906111111; //"9d07'54.862\"W",
+exports.paris = 2.337229166667; //"2d20'14.025\"E",
+exports.bogota = -74.080916666667; //"74d04'51.3\"W",
+exports.madrid = -3.687938888889; //"3d41'16.58\"W",
+exports.rome = 12.452333333333; //"12d27'8.4\"E",
+exports.bern = 7.439583333333; //"7d26'22.5\"E",
+exports.jakarta = 106.807719444444; //"106d48'27.79\"E",
+exports.ferro = -17.666666666667; //"17d40'W",
+exports.brussels = 4.367975; //"4d22'4.71\"E",
+exports.stockholm = 18.058277777778; //"18d3'29.8\"E",
+exports.athens = 23.7163375; //"23d42'58.815\"E",
+exports.oslo = 10.722916666667; //"10d43'22.5\"E"
+},{}],28:[function(_dereq_,module,exports){
+var proj = _dereq_('./Proj');
+var transform = _dereq_('./transform');
+var wgs84 = proj('WGS84');
+
+function transformer(from, to, coords) {
+  var transformedArray;
+  if (Array.isArray(coords)) {
+    transformedArray = transform(from, to, coords);
+    if (coords.length === 3) {
+      return [transformedArray.x, transformedArray.y, transformedArray.z];
+    }
+    else {
+      return [transformedArray.x, transformedArray.y];
+    }
+  }
+  else {
+    return transform(from, to, coords);
+  }
+}
+
+function checkProj(item) {
+  if (item instanceof proj) {
+    return item;
+  }
+  if (item.oProj) {
+    return item.oProj;
+  }
+  return proj(item);
+}
+function proj4(fromProj, toProj, coord) {
+  fromProj = checkProj(fromProj);
+  var single = false;
+  var obj;
+  if (typeof toProj === 'undefined') {
+    toProj = fromProj;
+    fromProj = wgs84;
+    single = true;
+  }
+  else if (typeof toProj.x !== 'undefined' || Array.isArray(toProj)) {
+    coord = toProj;
+    toProj = fromProj;
+    fromProj = wgs84;
+    single = true;
+  }
+  toProj = checkProj(toProj);
+  if (coord) {
+    return transformer(fromProj, toProj, coord);
+  }
+  else {
+    obj = {
+      forward: function(coords) {
+        return transformer(fromProj, toProj, coords);
+      },
+      inverse: function(coords) {
+        return transformer(toProj, fromProj, coords);
+      }
+    };
+    if (single) {
+      obj.oProj = toProj;
+    }
+    return obj;
+  }
+}
+module.exports = proj4;
+},{"./Proj":2,"./transform":64}],29:[function(_dereq_,module,exports){
+var HALF_PI = Math.PI/2;
+var PJD_3PARAM = 1;
+var PJD_7PARAM = 2;
+var PJD_GRIDSHIFT = 3;
+var PJD_WGS84 = 4; // WGS84 or equivalent
+var PJD_NODATUM = 5; // WGS84 or equivalent
+var SEC_TO_RAD = 4.84813681109535993589914102357e-6;
+var AD_C = 1.0026000;
+var COS_67P5 = 0.38268343236508977;
+var datum = function(proj) {
+  if (!(this instanceof datum)) {
+    return new datum(proj);
+  }
+  this.datum_type = PJD_WGS84; //default setting
+  if (!proj) {
+    return;
+  }
+  if (proj.datumCode && proj.datumCode === 'none') {
+    this.datum_type = PJD_NODATUM;
+  }
+  if (proj.datum_params) {
+    for (var i = 0; i < proj.datum_params.length; i++) {
+      proj.datum_params[i] = parseFloat(proj.datum_params[i]);
+    }
+    if (proj.datum_params[0] !== 0 || proj.datum_params[1] !== 0 || proj.datum_params[2] !== 0) {
+      this.datum_type = PJD_3PARAM;
+    }
+    if (proj.datum_params.length > 3) {
+      if (proj.datum_params[3] !== 0 || proj.datum_params[4] !== 0 || proj.datum_params[5] !== 0 || proj.datum_params[6] !== 0) {
+        this.datum_type = PJD_7PARAM;
+        proj.datum_params[3] *= SEC_TO_RAD;
+        proj.datum_params[4] *= SEC_TO_RAD;
+        proj.datum_params[5] *= SEC_TO_RAD;
+        proj.datum_params[6] = (proj.datum_params[6] / 1000000.0) + 1.0;
+      }
+    }
+  }
+  // DGR 2011-03-21 : nadgrids support
+  this.datum_type = proj.grids ? PJD_GRIDSHIFT : this.datum_type;
+
+  this.a = proj.a; //datum object also uses these values
+  this.b = proj.b;
+  this.es = proj.es;
+  this.ep2 = proj.ep2;
+  this.datum_params = proj.datum_params;
+  if (this.datum_type === PJD_GRIDSHIFT) {
+    this.grids = proj.grids;
+  }
+};
+datum.prototype = {
+
+
+  /****************************************************************/
+  // cs_compare_datums()
+  //   Returns TRUE if the two datums match, otherwise FALSE.
+  compare_datums: function(dest) {
+    if (this.datum_type !== dest.datum_type) {
+      return false; // false, datums are not equal
+    }
+    else if (this.a !== dest.a || Math.abs(this.es - dest.es) > 0.000000000050) {
+      // the tolerence for es is to ensure that GRS80 and WGS84
+      // are considered identical
+      return false;
+    }
+    else if (this.datum_type === PJD_3PARAM) {
+      return (this.datum_params[0] === dest.datum_params[0] && this.datum_params[1] === dest.datum_params[1] && this.datum_params[2] === dest.datum_params[2]);
+    }
+    else if (this.datum_type === PJD_7PARAM) {
+      return (this.datum_params[0] === dest.datum_params[0] && this.datum_params[1] === dest.datum_params[1] && this.datum_params[2] === dest.datum_params[2] && this.datum_params[3] === dest.datum_params[3] && this.datum_params[4] === dest.datum_params[4] && this.datum_params[5] === dest.datum_params[5] && this.datum_params[6] === dest.datum_params[6]);
+    }
+    else if (this.datum_type === PJD_GRIDSHIFT || dest.datum_type === PJD_GRIDSHIFT) {
+      //alert("ERROR: Grid shift transformations are not implemented.");
+      //return false
+      //DGR 2012-07-29 lazy ...
+      return this.nadgrids === dest.nadgrids;
+    }
+    else {
+      return true; // datums are equal
+    }
+  }, // cs_compare_datums()
+
+  /*
+   * The function Convert_Geodetic_To_Geocentric converts geodetic coordinates
+   * (latitude, longitude, and height) to geocentric coordinates (X, Y, Z),
+   * according to the current ellipsoid parameters.
+   *
+   *    Latitude  : Geodetic latitude in radians                     (input)
+   *    Longitude : Geodetic longitude in radians                    (input)
+   *    Height    : Geodetic height, in meters                       (input)
+   *    X         : Calculated Geocentric X coordinate, in meters    (output)
+   *    Y         : Calculated Geocentric Y coordinate, in meters    (output)
+   *    Z         : Calculated Geocentric Z coordinate, in meters    (output)
+   *
+   */
+  geodetic_to_geocentric: function(p) {
+    var Longitude = p.x;
+    var Latitude = p.y;
+    var Height = p.z ? p.z : 0; //Z value not always supplied
+    var X; // output
+    var Y;
+    var Z;
+
+    var Error_Code = 0; //  GEOCENT_NO_ERROR;
+    var Rn; /*  Earth radius at location  */
+    var Sin_Lat; /*  Math.sin(Latitude)  */
+    var Sin2_Lat; /*  Square of Math.sin(Latitude)  */
+    var Cos_Lat; /*  Math.cos(Latitude)  */
+
+    /*
+     ** Don't blow up if Latitude is just a little out of the value
+     ** range as it may just be a rounding issue.  Also removed longitude
+     ** test, it should be wrapped by Math.cos() and Math.sin().  NFW for PROJ.4, Sep/2001.
+     */
+    if (Latitude < -HALF_PI && Latitude > -1.001 * HALF_PI) {
+      Latitude = -HALF_PI;
+    }
+    else if (Latitude > HALF_PI && Latitude < 1.001 * HALF_PI) {
+      Latitude = HALF_PI;
+    }
+    else if ((Latitude < -HALF_PI) || (Latitude > HALF_PI)) {
+      /* Latitude out of range */
+      //..reportError('geocent:lat out of range:' + Latitude);
+      return null;
+    }
+
+    if (Longitude > Math.PI) {
+      Longitude -= (2 * Math.PI);
+    }
+    Sin_Lat = Math.sin(Latitude);
+    Cos_Lat = Math.cos(Latitude);
+    Sin2_Lat = Sin_Lat * Sin_Lat;
+    Rn = this.a / (Math.sqrt(1.0e0 - this.es * Sin2_Lat));
+    X = (Rn + Height) * Cos_Lat * Math.cos(Longitude);
+    Y = (Rn + Height) * Cos_Lat * Math.sin(Longitude);
+    Z = ((Rn * (1 - this.es)) + Height) * Sin_Lat;
+
+    p.x = X;
+    p.y = Y;
+    p.z = Z;
+    return Error_Code;
+  }, // cs_geodetic_to_geocentric()
+
+
+  geocentric_to_geodetic: function(p) {
+    /* local defintions and variables */
+    /* end-criterium of loop, accuracy of sin(Latitude) */
+    var genau = 1e-12;
+    var genau2 = (genau * genau);
+    var maxiter = 30;
+
+    var P; /* distance between semi-minor axis and location */
+    var RR; /* distance between center and location */
+    var CT; /* sin of geocentric latitude */
+    var ST; /* cos of geocentric latitude */
+    var RX;
+    var RK;
+    var RN; /* Earth radius at location */
+    var CPHI0; /* cos of start or old geodetic latitude in iterations */
+    var SPHI0; /* sin of start or old geodetic latitude in iterations */
+    var CPHI; /* cos of searched geodetic latitude */
+    var SPHI; /* sin of searched geodetic latitude */
+    var SDPHI; /* end-criterium: addition-theorem of sin(Latitude(iter)-Latitude(iter-1)) */
+    var At_Pole; /* indicates location is in polar region */
+    var iter; /* # of continous iteration, max. 30 is always enough (s.a.) */
+
+    var X = p.x;
+    var Y = p.y;
+    var Z = p.z ? p.z : 0.0; //Z value not always supplied
+    var Longitude;
+    var Latitude;
+    var Height;
+
+    At_Pole = false;
+    P = Math.sqrt(X * X + Y * Y);
+    RR = Math.sqrt(X * X + Y * Y + Z * Z);
+
+    /*      special cases for latitude and longitude */
+    if (P / this.a < genau) {
+
+      /*  special case, if P=0. (X=0., Y=0.) */
+      At_Pole = true;
+      Longitude = 0.0;
+
+      /*  if (X,Y,Z)=(0.,0.,0.) then Height becomes semi-minor axis
+       *  of ellipsoid (=center of mass), Latitude becomes PI/2 */
+      if (RR / this.a < genau) {
+        Latitude = HALF_PI;
+        Height = -this.b;
+        return;
+      }
+    }
+    else {
+      /*  ellipsoidal (geodetic) longitude
+       *  interval: -PI < Longitude <= +PI */
+      Longitude = Math.atan2(Y, X);
+    }
+
+    /* --------------------------------------------------------------
+     * Following iterative algorithm was developped by
+     * "Institut for Erdmessung", University of Hannover, July 1988.
+     * Internet: www.ife.uni-hannover.de
+     * Iterative computation of CPHI,SPHI and Height.
+     * Iteration of CPHI and SPHI to 10**-12 radian resp.
+     * 2*10**-7 arcsec.
+     * --------------------------------------------------------------
+     */
+    CT = Z / RR;
+    ST = P / RR;
+    RX = 1.0 / Math.sqrt(1.0 - this.es * (2.0 - this.es) * ST * ST);
+    CPHI0 = ST * (1.0 - this.es) * RX;
+    SPHI0 = CT * RX;
+    iter = 0;
+
+    /* loop to find sin(Latitude) resp. Latitude
+     * until |sin(Latitude(iter)-Latitude(iter-1))| < genau */
+    do {
+      iter++;
+      RN = this.a / Math.sqrt(1.0 - this.es * SPHI0 * SPHI0);
+
+      /*  ellipsoidal (geodetic) height */
+      Height = P * CPHI0 + Z * SPHI0 - RN * (1.0 - this.es * SPHI0 * SPHI0);
+
+      RK = this.es * RN / (RN + Height);
+      RX = 1.0 / Math.sqrt(1.0 - RK * (2.0 - RK) * ST * ST);
+      CPHI = ST * (1.0 - RK) * RX;
+      SPHI = CT * RX;
+      SDPHI = SPHI * CPHI0 - CPHI * SPHI0;
+      CPHI0 = CPHI;
+      SPHI0 = SPHI;
+    }
+    while (SDPHI * SDPHI > genau2 && iter < maxiter);
+
+    /*      ellipsoidal (geodetic) latitude */
+    Latitude = Math.atan(SPHI / Math.abs(CPHI));
+
+    p.x = Longitude;
+    p.y = Latitude;
+    p.z = Height;
+    return p;
+  }, // cs_geocentric_to_geodetic()
+
+  /** Convert_Geocentric_To_Geodetic
+   * The method used here is derived from 'An Improved Algorithm for
+   * Geocentric to Geodetic Coordinate Conversion', by Ralph Toms, Feb 1996
+   */
+  geocentric_to_geodetic_noniter: function(p) {
+    var X = p.x;
+    var Y = p.y;
+    var Z = p.z ? p.z : 0; //Z value not always supplied
+    var Longitude;
+    var Latitude;
+    var Height;
+
+    var W; /* distance from Z axis */
+    var W2; /* square of distance from Z axis */
+    var T0; /* initial estimate of vertical component */
+    var T1; /* corrected estimate of vertical component */
+    var S0; /* initial estimate of horizontal component */
+    var S1; /* corrected estimate of horizontal component */
+    var Sin_B0; /* Math.sin(B0), B0 is estimate of Bowring aux variable */
+    var Sin3_B0; /* cube of Math.sin(B0) */
+    var Cos_B0; /* Math.cos(B0) */
+    var Sin_p1; /* Math.sin(phi1), phi1 is estimated latitude */
+    var Cos_p1; /* Math.cos(phi1) */
+    var Rn; /* Earth radius at location */
+    var Sum; /* numerator of Math.cos(phi1) */
+    var At_Pole; /* indicates location is in polar region */
+
+    X = parseFloat(X); // cast from string to float
+    Y = parseFloat(Y);
+    Z = parseFloat(Z);
+
+    At_Pole = false;
+    if (X !== 0.0) {
+      Longitude = Math.atan2(Y, X);
+    }
+    else {
+      if (Y > 0) {
+        Longitude = HALF_PI;
+      }
+      else if (Y < 0) {
+        Longitude = -HALF_PI;
+      }
+      else {
+        At_Pole = true;
+        Longitude = 0.0;
+        if (Z > 0.0) { /* north pole */
+          Latitude = HALF_PI;
+        }
+        else if (Z < 0.0) { /* south pole */
+          Latitude = -HALF_PI;
+        }
+        else { /* center of earth */
+          Latitude = HALF_PI;
+          Height = -this.b;
+          return;
+        }
+      }
+    }
+    W2 = X * X + Y * Y;
+    W = Math.sqrt(W2);
+    T0 = Z * AD_C;
+    S0 = Math.sqrt(T0 * T0 + W2);
+    Sin_B0 = T0 / S0;
+    Cos_B0 = W / S0;
+    Sin3_B0 = Sin_B0 * Sin_B0 * Sin_B0;
+    T1 = Z + this.b * this.ep2 * Sin3_B0;
+    Sum = W - this.a * this.es * Cos_B0 * Cos_B0 * Cos_B0;
+    S1 = Math.sqrt(T1 * T1 + Sum * Sum);
+    Sin_p1 = T1 / S1;
+    Cos_p1 = Sum / S1;
+    Rn = this.a / Math.sqrt(1.0 - this.es * Sin_p1 * Sin_p1);
+    if (Cos_p1 >= COS_67P5) {
+      Height = W / Cos_p1 - Rn;
+    }
+    else if (Cos_p1 <= -COS_67P5) {
+      Height = W / -Cos_p1 - Rn;
+    }
+    else {
+      Height = Z / Sin_p1 + Rn * (this.es - 1.0);
+    }
+    if (At_Pole === false) {
+      Latitude = Math.atan(Sin_p1 / Cos_p1);
+    }
+
+    p.x = Longitude;
+    p.y = Latitude;
+    p.z = Height;
+    return p;
+  }, // geocentric_to_geodetic_noniter()
+
+  /****************************************************************/
+  // pj_geocentic_to_wgs84( p )
+  //  p = point to transform in geocentric coordinates (x,y,z)
+  geocentric_to_wgs84: function(p) {
+
+    if (this.datum_type === PJD_3PARAM) {
+      // if( x[io] === HUGE_VAL )
+      //    continue;
+      p.x += this.datum_params[0];
+      p.y += this.datum_params[1];
+      p.z += this.datum_params[2];
+
+    }
+    else if (this.datum_type === PJD_7PARAM) {
+      var Dx_BF = this.datum_params[0];
+      var Dy_BF = this.datum_params[1];
+      var Dz_BF = this.datum_params[2];
+      var Rx_BF = this.datum_params[3];
+      var Ry_BF = this.datum_params[4];
+      var Rz_BF = this.datum_params[5];
+      var M_BF = this.datum_params[6];
+      // if( x[io] === HUGE_VAL )
+      //    continue;
+      var x_out = M_BF * (p.x - Rz_BF * p.y + Ry_BF * p.z) + Dx_BF;
+      var y_out = M_BF * (Rz_BF * p.x + p.y - Rx_BF * p.z) + Dy_BF;
+      var z_out = M_BF * (-Ry_BF * p.x + Rx_BF * p.y + p.z) + Dz_BF;
+      p.x = x_out;
+      p.y = y_out;
+      p.z = z_out;
+    }
+  }, // cs_geocentric_to_wgs84
+
+  /****************************************************************/
+  // pj_geocentic_from_wgs84()
+  //  coordinate system definition,
+  //  point to transform in geocentric coordinates (x,y,z)
+  geocentric_from_wgs84: function(p) {
+
+    if (this.datum_type === PJD_3PARAM) {
+      //if( x[io] === HUGE_VAL )
+      //    continue;
+      p.x -= this.datum_params[0];
+      p.y -= this.datum_params[1];
+      p.z -= this.datum_params[2];
+
+    }
+    else if (this.datum_type === PJD_7PARAM) {
+      var Dx_BF = this.datum_params[0];
+      var Dy_BF = this.datum_params[1];
+      var Dz_BF = this.datum_params[2];
+      var Rx_BF = this.datum_params[3];
+      var Ry_BF = this.datum_params[4];
+      var Rz_BF = this.datum_params[5];
+      var M_BF = this.datum_params[6];
+      var x_tmp = (p.x - Dx_BF) / M_BF;
+      var y_tmp = (p.y - Dy_BF) / M_BF;
+      var z_tmp = (p.z - Dz_BF) / M_BF;
+      //if( x[io] === HUGE_VAL )
+      //    continue;
+
+      p.x = x_tmp + Rz_BF * y_tmp - Ry_BF * z_tmp;
+      p.y = -Rz_BF * x_tmp + y_tmp + Rx_BF * z_tmp;
+      p.z = Ry_BF * x_tmp - Rx_BF * y_tmp + z_tmp;
+    } //cs_geocentric_from_wgs84()
+  }
+};
+
+/** point object, nothing fancy, just allows values to be
+    passed back and forth by reference rather than by value.
+    Other point classes may be used as long as they have
+    x and y properties, which will get modified in the transform method.
+*/
+module.exports = datum;
+
+},{}],30:[function(_dereq_,module,exports){
+var PJD_3PARAM = 1;
+var PJD_7PARAM = 2;
+var PJD_GRIDSHIFT = 3;
+var PJD_NODATUM = 5; // WGS84 or equivalent
+var SRS_WGS84_SEMIMAJOR = 6378137; // only used in grid shift transforms
+var SRS_WGS84_ESQUARED = 0.006694379990141316; //DGR: 2012-07-29
+module.exports = function(source, dest, point) {
+  var wp, i, l;
+
+  function checkParams(fallback) {
+    return (fallback === PJD_3PARAM || fallback === PJD_7PARAM);
+  }
+  // Short cut if the datums are identical.
+  if (source.compare_datums(dest)) {
+    return point; // in this case, zero is sucess,
+    // whereas cs_compare_datums returns 1 to indicate TRUE
+    // confusing, should fix this
+  }
+
+  // Explicitly skip datum transform by setting 'datum=none' as parameter for either source or dest
+  if (source.datum_type === PJD_NODATUM || dest.datum_type === PJD_NODATUM) {
+    return point;
+  }
+
+  //DGR: 2012-07-29 : add nadgrids support (begin)
+  var src_a = source.a;
+  var src_es = source.es;
+
+  var dst_a = dest.a;
+  var dst_es = dest.es;
+
+  var fallback = source.datum_type;
+  // If this datum requires grid shifts, then apply it to geodetic coordinates.
+  if (fallback === PJD_GRIDSHIFT) {
+    if (this.apply_gridshift(source, 0, point) === 0) {
+      source.a = SRS_WGS84_SEMIMAJOR;
+      source.es = SRS_WGS84_ESQUARED;
+    }
+    else {
+      // try 3 or 7 params transformation or nothing ?
+      if (!source.datum_params) {
+        source.a = src_a;
+        source.es = source.es;
+        return point;
+      }
+      wp = 1;
+      for (i = 0, l = source.datum_params.length; i < l; i++) {
+        wp *= source.datum_params[i];
+      }
+      if (wp === 0) {
+        source.a = src_a;
+        source.es = source.es;
+        return point;
+      }
+      if (source.datum_params.length > 3) {
+        fallback = PJD_7PARAM;
+      }
+      else {
+        fallback = PJD_3PARAM;
+      }
+    }
+  }
+  if (dest.datum_type === PJD_GRIDSHIFT) {
+    dest.a = SRS_WGS84_SEMIMAJOR;
+    dest.es = SRS_WGS84_ESQUARED;
+  }
+  // Do we need to go through geocentric coordinates?
+  if (source.es !== dest.es || source.a !== dest.a || checkParams(fallback) || checkParams(dest.datum_type)) {
+    //DGR: 2012-07-29 : add nadgrids support (end)
+    // Convert to geocentric coordinates.
+    source.geodetic_to_geocentric(point);
+    // CHECK_RETURN;
+    // Convert between datums
+    if (checkParams(source.datum_type)) {
+      source.geocentric_to_wgs84(point);
+      // CHECK_RETURN;
+    }
+    if (checkParams(dest.datum_type)) {
+      dest.geocentric_from_wgs84(point);
+      // CHECK_RETURN;
+    }
+    // Convert back to geodetic coordinates
+    dest.geocentric_to_geodetic(point);
+    // CHECK_RETURN;
+  }
+  // Apply grid shift to destination if required
+  if (dest.datum_type === PJD_GRIDSHIFT) {
+    this.apply_gridshift(dest, 1, point);
+    // CHECK_RETURN;
+  }
+
+  source.a = src_a;
+  source.es = src_es;
+  dest.a = dst_a;
+  dest.es = dst_es;
+
+  return point;
+};
+
+
+},{}],31:[function(_dereq_,module,exports){
+var globals = _dereq_('./global');
+var parseProj = _dereq_('./projString');
+var wkt = _dereq_('./wkt');
+
+function defs(name) {
+  /*global console*/
+  var that = this;
+  if (arguments.length === 2) {
+    var def = arguments[1];
+    if (typeof def === 'string') {
+      if (def[0] === '+') {
+        defs[name] = parseProj(arguments[1]);
+      }
+      else {
+        defs[name] = wkt(arguments[1]);
+      }
+    } else {
+      defs[name] = def;
+    }
+  }
+  else if (arguments.length === 1) {
+    if (Array.isArray(name)) {
+      return name.map(function(v) {
+        if (Array.isArray(v)) {
+          defs.apply(that, v);
+        }
+        else {
+          defs(v);
+        }
+      });
+    }
+    else if (typeof name === 'string') {
+      if (name in defs) {
+        return defs[name];
+      }
+    }
+    else if ('EPSG' in name) {
+      defs['EPSG:' + name.EPSG] = name;
+    }
+    else if ('ESRI' in name) {
+      defs['ESRI:' + name.ESRI] = name;
+    }
+    else if ('IAU2000' in name) {
+      defs['IAU2000:' + name.IAU2000] = name;
+    }
+    else {
+      console.log(name);
+    }
+    return;
+  }
+
+
+}
+globals(defs);
+module.exports = defs;
+
+},{"./global":34,"./projString":37,"./wkt":65}],32:[function(_dereq_,module,exports){
+var Datum = _dereq_('./constants/Datum');
+var Ellipsoid = _dereq_('./constants/Ellipsoid');
+var extend = _dereq_('./extend');
+var datum = _dereq_('./datum');
+var EPSLN = 1.0e-10;
+// ellipoid pj_set_ell.c
+var SIXTH = 0.1666666666666666667;
+/* 1/6 */
+var RA4 = 0.04722222222222222222;
+/* 17/360 */
+var RA6 = 0.02215608465608465608;
+module.exports = function(json) {
+  // DGR 2011-03-20 : nagrids -> nadgrids
+  if (json.datumCode && json.datumCode !== 'none') {
+    var datumDef = Datum[json.datumCode];
+    if (datumDef) {
+      json.datum_params = datumDef.towgs84 ? datumDef.towgs84.split(',') : null;
+      json.ellps = datumDef.ellipse;
+      json.datumName = datumDef.datumName ? datumDef.datumName : json.datumCode;
+    }
+  }
+  if (!json.a) { // do we have an ellipsoid?
+    var ellipse = Ellipsoid[json.ellps] ? Ellipsoid[json.ellps] : Ellipsoid.WGS84;
+    extend(json, ellipse);
+  }
+  if (json.rf && !json.b) {
+    json.b = (1.0 - 1.0 / json.rf) * json.a;
+  }
+  if (json.rf === 0 || Math.abs(json.a - json.b) < EPSLN) {
+    json.sphere = true;
+    json.b = json.a;
+  }
+  json.a2 = json.a * json.a; // used in geocentric
+  json.b2 = json.b * json.b; // used in geocentric
+  json.es = (json.a2 - json.b2) / json.a2; // e ^ 2
+  json.e = Math.sqrt(json.es); // eccentricity
+  if (json.R_A) {
+    json.a *= 1 - json.es * (SIXTH + json.es * (RA4 + json.es * RA6));
+    json.a2 = json.a * json.a;
+    json.b2 = json.b * json.b;
+    json.es = 0;
+  }
+  json.ep2 = (json.a2 - json.b2) / json.b2; // used in geocentric
+  if (!json.k0) {
+    json.k0 = 1.0; //default value
+  }
+  //DGR 2010-11-12: axis
+  if (!json.axis) {
+    json.axis = "enu";
+  }
+
+  if (!json.datum) {
+    json.datum = datum(json);
+  }
+  return json;
+};
+
+},{"./constants/Datum":25,"./constants/Ellipsoid":26,"./datum":29,"./extend":33}],33:[function(_dereq_,module,exports){
+module.exports = function(destination, source) {
+  destination = destination || {};
+  var value, property;
+  if (!source) {
+    return destination;
+  }
+  for (property in source) {
+    value = source[property];
+    if (value !== undefined) {
+      destination[property] = value;
+    }
+  }
+  return destination;
+};
+
+},{}],34:[function(_dereq_,module,exports){
+module.exports = function(defs) {
+  defs('EPSG:4326', "+title=WGS 84 (long/lat) +proj=longlat +ellps=WGS84 +datum=WGS84 +units=degrees");
+  defs('EPSG:4269', "+title=NAD83 (long/lat) +proj=longlat +a=6378137.0 +b=6356752.31414036 +ellps=GRS80 +datum=NAD83 +units=degrees");
+  defs('EPSG:3857', "+title=WGS 84 / Pseudo-Mercator +proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +no_defs");
+
+  defs.WGS84 = defs['EPSG:4326'];
+  defs['EPSG:3785'] = defs['EPSG:3857']; // maintain backward compat, official code is 3857
+  defs.GOOGLE = defs['EPSG:3857'];
+  defs['EPSG:900913'] = defs['EPSG:3857'];
+  defs['EPSG:102113'] = defs['EPSG:3857'];
+};
+
+},{}],35:[function(_dereq_,module,exports){
+var proj4 = _dereq_('./core');
+proj4.defaultDatum = 'WGS84'; //default datum
+proj4.Proj = _dereq_('./Proj');
+proj4.WGS84 = new proj4.Proj('WGS84');
+proj4.Point = _dereq_('./Point');
+proj4.toPoint = _dereq_("./common/toPoint");
+proj4.defs = _dereq_('./defs');
+proj4.transform = _dereq_('./transform');
+proj4.mgrs = _dereq_('mgrs');
+proj4.version = _dereq_('../package.json').version;
+_dereq_('./includedProjections')(proj4);
+module.exports = proj4;
+},{"../package.json":67,"./Point":1,"./Proj":2,"./common/toPoint":23,"./core":28,"./defs":31,"./includedProjections":"gWUPNW","./transform":64,"mgrs":66}],36:[function(_dereq_,module,exports){
+var defs = _dereq_('./defs');
+var wkt = _dereq_('./wkt');
+var projStr = _dereq_('./projString');
+function testObj(code){
+  return typeof code === 'string';
+}
+function testDef(code){
+  return code in defs;
+}
+function testWKT(code){
+  var codeWords = ['GEOGCS','GEOCCS','PROJCS','LOCAL_CS'];
+  return codeWords.reduce(function(a,b){
+    return a+1+code.indexOf(b);
+  },0);
+}
+function testProj(code){
+  return code[0] === '+';
+}
+function parse(code){
+  if (testObj(code)) {
+    //check to see if this is a WKT string
+    if (testDef(code)) {
+      return defs[code];
+    }
+    else if (testWKT(code)) {
+      return wkt(code);
+    }
+    else if (testProj(code)) {
+      return projStr(code);
+    }
+  }else{
+    return code;
+  }
+}
+
+module.exports = parse;
+},{"./defs":31,"./projString":37,"./wkt":65}],37:[function(_dereq_,module,exports){
+var D2R = 0.01745329251994329577;
+var PrimeMeridian = _dereq_('./constants/PrimeMeridian');
+module.exports = function(defData) {
+  var self = {};
+
+  var paramObj = {};
+  defData.split("+").map(function(v) {
+    return v.trim();
+  }).filter(function(a) {
+    return a;
+  }).forEach(function(a) {
+    var split = a.split("=");
+    split.push(true);
+    paramObj[split[0].toLowerCase()] = split[1];
+  });
+  var paramName, paramVal, paramOutname;
+  var params = {
+    proj: 'projName',
+    datum: 'datumCode',
+    rf: function(v) {
+      self.rf = parseFloat(v, 10);
+    },
+    lat_0: function(v) {
+      self.lat0 = v * D2R;
+    },
+    lat_1: function(v) {
+      self.lat1 = v * D2R;
+    },
+    lat_2: function(v) {
+      self.lat2 = v * D2R;
+    },
+    lat_ts: function(v) {
+      self.lat_ts = v * D2R;
+    },
+    lon_0: function(v) {
+      self.long0 = v * D2R;
+    },
+    lon_1: function(v) {
+      self.long1 = v * D2R;
+    },
+    lon_2: function(v) {
+      self.long2 = v * D2R;
+    },
+    alpha: function(v) {
+      self.alpha = parseFloat(v) * D2R;
+    },
+    lonc: function(v) {
+      self.longc = v * D2R;
+    },
+    x_0: function(v) {
+      self.x0 = parseFloat(v, 10);
+    },
+    y_0: function(v) {
+      self.y0 = parseFloat(v, 10);
+    },
+    k_0: function(v) {
+      self.k0 = parseFloat(v, 10);
+    },
+    k: function(v) {
+      self.k0 = parseFloat(v, 10);
+    },
+    r_a: function() {
+      self.R_A = true;
+    },
+    zone: function(v) {
+      self.zone = parseInt(v, 10);
+    },
+    south: function() {
+      self.utmSouth = true;
+    },
+    towgs84: function(v) {
+      self.datum_params = v.split(",").map(function(a) {
+        return parseFloat(a, 10);
+      });
+    },
+    to_meter: function(v) {
+      self.to_meter = parseFloat(v, 10);
+    },
+    from_greenwich: function(v) {
+      self.from_greenwich = v * D2R;
+    },
+    pm: function(v) {
+      self.from_greenwich = (PrimeMeridian[v] ? PrimeMeridian[v] : parseFloat(v, 10)) * D2R;
+    },
+    nadgrids: function(v) {
+      if (v === '@null') {
+        self.datumCode = 'none';
+      }
+      else {
+        self.nadgrids = v;
+      }
+    },
+    axis: function(v) {
+      var legalAxis = "ewnsud";
+      if (v.length === 3 && legalAxis.indexOf(v.substr(0, 1)) !== -1 && legalAxis.indexOf(v.substr(1, 1)) !== -1 && legalAxis.indexOf(v.substr(2, 1)) !== -1) {
+        self.axis = v;
+      }
+    }
+  };
+  for (paramName in paramObj) {
+    paramVal = paramObj[paramName];
+    if (paramName in params) {
+      paramOutname = params[paramName];
+      if (typeof paramOutname === 'function') {
+        paramOutname(paramVal);
+      }
+      else {
+        self[paramOutname] = paramVal;
+      }
+    }
+    else {
+      self[paramName] = paramVal;
+    }
+  }
+  if(typeof self.datumCode === 'string' && self.datumCode !== "WGS84"){
+    self.datumCode = self.datumCode.toLowerCase();
+  }
+  return self;
+};
+
+},{"./constants/PrimeMeridian":27}],38:[function(_dereq_,module,exports){
+var projs = [
+  _dereq_('./projections/merc'),
+  _dereq_('./projections/longlat')
+];
+var names = {};
+var projStore = [];
+
+function add(proj, i) {
+  var len = projStore.length;
+  if (!proj.names) {
+    console.log(i);
+    return true;
+  }
+  projStore[len] = proj;
+  proj.names.forEach(function(n) {
+    names[n.toLowerCase()] = len;
+  });
+  return this;
+}
+
+exports.add = add;
+
+exports.get = function(name) {
+  if (!name) {
+    return false;
+  }
+  var n = name.toLowerCase();
+  if (typeof names[n] !== 'undefined' && projStore[names[n]]) {
+    return projStore[names[n]];
+  }
+};
+exports.start = function() {
+  projs.forEach(add);
+};
+
+},{"./projections/longlat":50,"./projections/merc":51}],39:[function(_dereq_,module,exports){
+var EPSLN = 1.0e-10;
+var msfnz = _dereq_('../common/msfnz');
+var qsfnz = _dereq_('../common/qsfnz');
+var adjust_lon = _dereq_('../common/adjust_lon');
+var asinz = _dereq_('../common/asinz');
+exports.init = function() {
+
+  if (Math.abs(this.lat1 + this.lat2) < EPSLN) {
+    return;
+  }
+  this.temp = this.b / this.a;
+  this.es = 1 - Math.pow(this.temp, 2);
+  this.e3 = Math.sqrt(this.es);
+
+  this.sin_po = Math.sin(this.lat1);
+  this.cos_po = Math.cos(this.lat1);
+  this.t1 = this.sin_po;
+  this.con = this.sin_po;
+  this.ms1 = msfnz(this.e3, this.sin_po, this.cos_po);
+  this.qs1 = qsfnz(this.e3, this.sin_po, this.cos_po);
+
+  this.sin_po = Math.sin(this.lat2);
+  this.cos_po = Math.cos(this.lat2);
+  this.t2 = this.sin_po;
+  this.ms2 = msfnz(this.e3, this.sin_po, this.cos_po);
+  this.qs2 = qsfnz(this.e3, this.sin_po, this.cos_po);
+
+  this.sin_po = Math.sin(this.lat0);
+  this.cos_po = Math.cos(this.lat0);
+  this.t3 = this.sin_po;
+  this.qs0 = qsfnz(this.e3, this.sin_po, this.cos_po);
+
+  if (Math.abs(this.lat1 - this.lat2) > EPSLN) {
+    this.ns0 = (this.ms1 * this.ms1 - this.ms2 * this.ms2) / (this.qs2 - this.qs1);
+  }
+  else {
+    this.ns0 = this.con;
+  }
+  this.c = this.ms1 * this.ms1 + this.ns0 * this.qs1;
+  this.rh = this.a * Math.sqrt(this.c - this.ns0 * this.qs0) / this.ns0;
+};
+
+/* Albers Conical Equal Area forward equations--mapping lat,long to x,y
+  -------------------------------------------------------------------*/
+exports.forward = function(p) {
+
+  var lon = p.x;
+  var lat = p.y;
+
+  this.sin_phi = Math.sin(lat);
+  this.cos_phi = Math.cos(lat);
+
+  var qs = qsfnz(this.e3, this.sin_phi, this.cos_phi);
+  var rh1 = this.a * Math.sqrt(this.c - this.ns0 * qs) / this.ns0;
+  var theta = this.ns0 * adjust_lon(lon - this.long0);
+  var x = rh1 * Math.sin(theta) + this.x0;
+  var y = this.rh - rh1 * Math.cos(theta) + this.y0;
+
+  p.x = x;
+  p.y = y;
+  return p;
+};
+
+
+exports.inverse = function(p) {
+  var rh1, qs, con, theta, lon, lat;
+
+  p.x -= this.x0;
+  p.y = this.rh - p.y + this.y0;
+  if (this.ns0 >= 0) {
+    rh1 = Math.sqrt(p.x * p.x + p.y * p.y);
+    con = 1;
+  }
+  else {
+    rh1 = -Math.sqrt(p.x * p.x + p.y * p.y);
+    con = -1;
+  }
+  theta = 0;
+  if (rh1 !== 0) {
+    theta = Math.atan2(con * p.x, con * p.y);
+  }
+  con = rh1 * this.ns0 / this.a;
+  if (this.sphere) {
+    lat = Math.asin((this.c - con * con) / (2 * this.ns0));
+  }
+  else {
+    qs = (this.c - con * con) / this.ns0;
+    lat = this.phi1z(this.e3, qs);
+  }
+
+  lon = adjust_lon(theta / this.ns0 + this.long0);
+  p.x = lon;
+  p.y = lat;
+  return p;
+};
+
+/* Function to compute phi1, the latitude for the inverse of the
+   Albers Conical Equal-Area projection.
+-------------------------------------------*/
+exports.phi1z = function(eccent, qs) {
+  var sinphi, cosphi, con, com, dphi;
+  var phi = asinz(0.5 * qs);
+  if (eccent < EPSLN) {
+    return phi;
+  }
+
+  var eccnts = eccent * eccent;
+  for (var i = 1; i <= 25; i++) {
+    sinphi = Math.sin(phi);
+    cosphi = Math.cos(phi);
+    con = eccent * sinphi;
+    com = 1 - con * con;
+    dphi = 0.5 * com * com / cosphi * (qs / (1 - eccnts) - sinphi / com + 0.5 / eccent * Math.log((1 - con) / (1 + con)));
+    phi = phi + dphi;
+    if (Math.abs(dphi) <= 1e-7) {
+      return phi;
+    }
+  }
+  return null;
+};
+exports.names = ["Albers_Conic_Equal_Area", "Albers", "aea"];
+
+},{"../common/adjust_lon":5,"../common/asinz":6,"../common/msfnz":15,"../common/qsfnz":20}],40:[function(_dereq_,module,exports){
+var adjust_lon = _dereq_('../common/adjust_lon');
+var HALF_PI = Math.PI/2;
+var EPSLN = 1.0e-10;
+var mlfn = _dereq_('../common/mlfn');
+var e0fn = _dereq_('../common/e0fn');
+var e1fn = _dereq_('../common/e1fn');
+var e2fn = _dereq_('../common/e2fn');
+var e3fn = _dereq_('../common/e3fn');
+var gN = _dereq_('../common/gN');
+var asinz = _dereq_('../common/asinz');
+var imlfn = _dereq_('../common/imlfn');
+exports.init = function() {
+  this.sin_p12 = Math.sin(this.lat0);
+  this.cos_p12 = Math.cos(this.lat0);
+};
+
+exports.forward = function(p) {
+  var lon = p.x;
+  var lat = p.y;
+  var sinphi = Math.sin(p.y);
+  var cosphi = Math.cos(p.y);
+  var dlon = adjust_lon(lon - this.long0);
+  var e0, e1, e2, e3, Mlp, Ml, tanphi, Nl1, Nl, psi, Az, G, H, GH, Hs, c, kp, cos_c, s, s2, s3, s4, s5;
+  if (this.sphere) {
+    if (Math.abs(this.sin_p12 - 1) <= EPSLN) {
+      //North Pole case
+      p.x = this.x0 + this.a * (HALF_PI - lat) * Math.sin(dlon);
+      p.y = this.y0 - this.a * (HALF_PI - lat) * Math.cos(dlon);
+      return p;
+    }
+    else if (Math.abs(this.sin_p12 + 1) <= EPSLN) {
+      //South Pole case
+      p.x = this.x0 + this.a * (HALF_PI + lat) * Math.sin(dlon);
+      p.y = this.y0 + this.a * (HALF_PI + lat) * Math.cos(dlon);
+      return p;
+    }
+    else {
+      //default case
+      cos_c = this.sin_p12 * sinphi + this.cos_p12 * cosphi * Math.cos(dlon);
+      c = Math.acos(cos_c);
+      kp = c / Math.sin(c);
+      p.x = this.x0 + this.a * kp * cosphi * Math.sin(dlon);
+      p.y = this.y0 + this.a * kp * (this.cos_p12 * sinphi - this.sin_p12 * cosphi * Math.cos(dlon));
+      return p;
+    }
+  }
+  else {
+    e0 = e0fn(this.es);
+    e1 = e1fn(this.es);
+    e2 = e2fn(this.es);
+    e3 = e3fn(this.es);
+    if (Math.abs(this.sin_p12 - 1) <= EPSLN) {
+      //North Pole case
+      Mlp = this.a * mlfn(e0, e1, e2, e3, HALF_PI);
+      Ml = this.a * mlfn(e0, e1, e2, e3, lat);
+      p.x = this.x0 + (Mlp - Ml) * Math.sin(dlon);
+      p.y = this.y0 - (Mlp - Ml) * Math.cos(dlon);
+      return p;
+    }
+    else if (Math.abs(this.sin_p12 + 1) <= EPSLN) {
+      //South Pole case
+      Mlp = this.a * mlfn(e0, e1, e2, e3, HALF_PI);
+      Ml = this.a * mlfn(e0, e1, e2, e3, lat);
+      p.x = this.x0 + (Mlp + Ml) * Math.sin(dlon);
+      p.y = this.y0 + (Mlp + Ml) * Math.cos(dlon);
+      return p;
+    }
+    else {
+      //Default case
+      tanphi = sinphi / cosphi;
+      Nl1 = gN(this.a, this.e, this.sin_p12);
+      Nl = gN(this.a, this.e, sinphi);
+      psi = Math.atan((1 - this.es) * tanphi + this.es * Nl1 * this.sin_p12 / (Nl * cosphi));
+      Az = Math.atan2(Math.sin(dlon), this.cos_p12 * Math.tan(psi) - this.sin_p12 * Math.cos(dlon));
+      if (Az === 0) {
+        s = Math.asin(this.cos_p12 * Math.sin(psi) - this.sin_p12 * Math.cos(psi));
+      }
+      else if (Math.abs(Math.abs(Az) - Math.PI) <= EPSLN) {
+        s = -Math.asin(this.cos_p12 * Math.sin(psi) - this.sin_p12 * Math.cos(psi));
+      }
+      else {
+        s = Math.asin(Math.sin(dlon) * Math.cos(psi) / Math.sin(Az));
+      }
+      G = this.e * this.sin_p12 / Math.sqrt(1 - this.es);
+      H = this.e * this.cos_p12 * Math.cos(Az) / Math.sqrt(1 - this.es);
+      GH = G * H;
+      Hs = H * H;
+      s2 = s * s;
+      s3 = s2 * s;
+      s4 = s3 * s;
+      s5 = s4 * s;
+      c = Nl1 * s * (1 - s2 * Hs * (1 - Hs) / 6 + s3 / 8 * GH * (1 - 2 * Hs) + s4 / 120 * (Hs * (4 - 7 * Hs) - 3 * G * G * (1 - 7 * Hs)) - s5 / 48 * GH);
+      p.x = this.x0 + c * Math.sin(Az);
+      p.y = this.y0 + c * Math.cos(Az);
+      return p;
+    }
+  }
+
+
+};
+
+exports.inverse = function(p) {
+  p.x -= this.x0;
+  p.y -= this.y0;
+  var rh, z, sinz, cosz, lon, lat, con, e0, e1, e2, e3, Mlp, M, N1, psi, Az, cosAz, tmp, A, B, D, Ee, F;
+  if (this.sphere) {
+    rh = Math.sqrt(p.x * p.x + p.y * p.y);
+    if (rh > (2 * HALF_PI * this.a)) {
+      return;
+    }
+    z = rh / this.a;
+
+    sinz = Math.sin(z);
+    cosz = Math.cos(z);
+
+    lon = this.long0;
+    if (Math.abs(rh) <= EPSLN) {
+      lat = this.lat0;
+    }
+    else {
+      lat = asinz(cosz * this.sin_p12 + (p.y * sinz * this.cos_p12) / rh);
+      con = Math.abs(this.lat0) - HALF_PI;
+      if (Math.abs(con) <= EPSLN) {
+        if (this.lat0 >= 0) {
+          lon = adjust_lon(this.long0 + Math.atan2(p.x, - p.y));
+        }
+        else {
+          lon = adjust_lon(this.long0 - Math.atan2(-p.x, p.y));
+        }
+      }
+      else {
+        /*con = cosz - this.sin_p12 * Math.sin(lat);
+        if ((Math.abs(con) < EPSLN) && (Math.abs(p.x) < EPSLN)) {
+          //no-op, just keep the lon value as is
+        } else {
+          var temp = Math.atan2((p.x * sinz * this.cos_p12), (con * rh));
+          lon = adjust_lon(this.long0 + Math.atan2((p.x * sinz * this.cos_p12), (con * rh)));
+        }*/
+        lon = adjust_lon(this.long0 + Math.atan2(p.x * sinz, rh * this.cos_p12 * cosz - p.y * this.sin_p12 * sinz));
+      }
+    }
+
+    p.x = lon;
+    p.y = lat;
+    return p;
+  }
+  else {
+    e0 = e0fn(this.es);
+    e1 = e1fn(this.es);
+    e2 = e2fn(this.es);
+    e3 = e3fn(this.es);
+    if (Math.abs(this.sin_p12 - 1) <= EPSLN) {
+      //North pole case
+      Mlp = this.a * mlfn(e0, e1, e2, e3, HALF_PI);
+      rh = Math.sqrt(p.x * p.x + p.y * p.y);
+      M = Mlp - rh;
+      lat = imlfn(M / this.a, e0, e1, e2, e3);
+      lon = adjust_lon(this.long0 + Math.atan2(p.x, - 1 * p.y));
+      p.x = lon;
+      p.y = lat;
+      return p;
+    }
+    else if (Math.abs(this.sin_p12 + 1) <= EPSLN) {
+      //South pole case
+      Mlp = this.a * mlfn(e0, e1, e2, e3, HALF_PI);
+      rh = Math.sqrt(p.x * p.x + p.y * p.y);
+      M = rh - Mlp;
+
+      lat = imlfn(M / this.a, e0, e1, e2, e3);
+      lon = adjust_lon(this.long0 + Math.atan2(p.x, p.y));
+      p.x = lon;
+      p.y = lat;
+      return p;
+    }
+    else {
+      //default case
+      rh = Math.sqrt(p.x * p.x + p.y * p.y);
+      Az = Math.atan2(p.x, p.y);
+      N1 = gN(this.a, this.e, this.sin_p12);
+      cosAz = Math.cos(Az);
+      tmp = this.e * this.cos_p12 * cosAz;
+      A = -tmp * tmp / (1 - this.es);
+      B = 3 * this.es * (1 - A) * this.sin_p12 * this.cos_p12 * cosAz / (1 - this.es);
+      D = rh / N1;
+      Ee = D - A * (1 + A) * Math.pow(D, 3) / 6 - B * (1 + 3 * A) * Math.pow(D, 4) / 24;
+      F = 1 - A * Ee * Ee / 2 - D * Ee * Ee * Ee / 6;
+      psi = Math.asin(this.sin_p12 * Math.cos(Ee) + this.cos_p12 * Math.sin(Ee) * cosAz);
+      lon = adjust_lon(this.long0 + Math.asin(Math.sin(Az) * Math.sin(Ee) / Math.cos(psi)));
+      lat = Math.atan((1 - this.es * F * this.sin_p12 / Math.sin(psi)) * Math.tan(psi) / (1 - this.es));
+      p.x = lon;
+      p.y = lat;
+      return p;
+    }
+  }
+
+};
+exports.names = ["Azimuthal_Equidistant", "aeqd"];
+
+},{"../common/adjust_lon":5,"../common/asinz":6,"../common/e0fn":7,"../common/e1fn":8,"../common/e2fn":9,"../common/e3fn":10,"../common/gN":11,"../common/imlfn":12,"../common/mlfn":14}],41:[function(_dereq_,module,exports){
+var mlfn = _dereq_('../common/mlfn');
+var e0fn = _dereq_('../common/e0fn');
+var e1fn = _dereq_('../common/e1fn');
+var e2fn = _dereq_('../common/e2fn');
+var e3fn = _dereq_('../common/e3fn');
+var gN = _dereq_('../common/gN');
+var adjust_lon = _dereq_('../common/adjust_lon');
+var adjust_lat = _dereq_('../common/adjust_lat');
+var imlfn = _dereq_('../common/imlfn');
+var HALF_PI = Math.PI/2;
+var EPSLN = 1.0e-10;
+exports.init = function() {
+  if (!this.sphere) {
+    this.e0 = e0fn(this.es);
+    this.e1 = e1fn(this.es);
+    this.e2 = e2fn(this.es);
+    this.e3 = e3fn(this.es);
+    this.ml0 = this.a * mlfn(this.e0, this.e1, this.e2, this.e3, this.lat0);
+  }
+};
+
+
+
+/* Cassini forward equations--mapping lat,long to x,y
+  -----------------------------------------------------------------------*/
+exports.forward = function(p) {
+
+  /* Forward equations
+      -----------------*/
+  var x, y;
+  var lam = p.x;
+  var phi = p.y;
+  lam = adjust_lon(lam - this.long0);
+
+  if (this.sphere) {
+    x = this.a * Math.asin(Math.cos(phi) * Math.sin(lam));
+    y = this.a * (Math.atan2(Math.tan(phi), Math.cos(lam)) - this.lat0);
+  }
+  else {
+    //ellipsoid
+    var sinphi = Math.sin(phi);
+    var cosphi = Math.cos(phi);
+    var nl = gN(this.a, this.e, sinphi);
+    var tl = Math.tan(phi) * Math.tan(phi);
+    var al = lam * Math.cos(phi);
+    var asq = al * al;
+    var cl = this.es * cosphi * cosphi / (1 - this.es);
+    var ml = this.a * mlfn(this.e0, this.e1, this.e2, this.e3, phi);
+
+    x = nl * al * (1 - asq * tl * (1 / 6 - (8 - tl + 8 * cl) * asq / 120));
+    y = ml - this.ml0 + nl * sinphi / cosphi * asq * (0.5 + (5 - tl + 6 * cl) * asq / 24);
+
+
+  }
+
+  p.x = x + this.x0;
+  p.y = y + this.y0;
+  return p;
+};
+
+/* Inverse equations
+  -----------------*/
+exports.inverse = function(p) {
+  p.x -= this.x0;
+  p.y -= this.y0;
+  var x = p.x / this.a;
+  var y = p.y / this.a;
+  var phi, lam;
+
+  if (this.sphere) {
+    var dd = y + this.lat0;
+    phi = Math.asin(Math.sin(dd) * Math.cos(x));
+    lam = Math.atan2(Math.tan(x), Math.cos(dd));
+  }
+  else {
+    /* ellipsoid */
+    var ml1 = this.ml0 / this.a + y;
+    var phi1 = imlfn(ml1, this.e0, this.e1, this.e2, this.e3);
+    if (Math.abs(Math.abs(phi1) - HALF_PI) <= EPSLN) {
+      p.x = this.long0;
+      p.y = HALF_PI;
+      if (y < 0) {
+        p.y *= -1;
+      }
+      return p;
+    }
+    var nl1 = gN(this.a, this.e, Math.sin(phi1));
+
+    var rl1 = nl1 * nl1 * nl1 / this.a / this.a * (1 - this.es);
+    var tl1 = Math.pow(Math.tan(phi1), 2);
+    var dl = x * this.a / nl1;
+    var dsq = dl * dl;
+    phi = phi1 - nl1 * Math.tan(phi1) / rl1 * dl * dl * (0.5 - (1 + 3 * tl1) * dl * dl / 24);
+    lam = dl * (1 - dsq * (tl1 / 3 + (1 + 3 * tl1) * tl1 * dsq / 15)) / Math.cos(phi1);
+
+  }
+
+  p.x = adjust_lon(lam + this.long0);
+  p.y = adjust_lat(phi);
+  return p;
+
+};
+exports.names = ["Cassini", "Cassini_Soldner", "cass"];
+},{"../common/adjust_lat":4,"../common/adjust_lon":5,"../common/e0fn":7,"../common/e1fn":8,"../common/e2fn":9,"../common/e3fn":10,"../common/gN":11,"../common/imlfn":12,"../common/mlfn":14}],42:[function(_dereq_,module,exports){
+var adjust_lon = _dereq_('../common/adjust_lon');
+var qsfnz = _dereq_('../common/qsfnz');
+var msfnz = _dereq_('../common/msfnz');
+var iqsfnz = _dereq_('../common/iqsfnz');
+/*
+  reference:  
+    "Cartographic Projection Procedures for the UNIX Environment-
+    A User's Manual" by Gerald I. Evenden,
+    USGS Open File Report 90-284and Release 4 Interim Reports (2003)
+*/
+exports.init = function() {
+  //no-op
+  if (!this.sphere) {
+    this.k0 = msfnz(this.e, Math.sin(this.lat_ts), Math.cos(this.lat_ts));
+  }
+};
+
+
+/* Cylindrical Equal Area forward equations--mapping lat,long to x,y
+    ------------------------------------------------------------*/
+exports.forward = function(p) {
+  var lon = p.x;
+  var lat = p.y;
+  var x, y;
+  /* Forward equations
+      -----------------*/
+  var dlon = adjust_lon(lon - this.long0);
+  if (this.sphere) {
+    x = this.x0 + this.a * dlon * Math.cos(this.lat_ts);
+    y = this.y0 + this.a * Math.sin(lat) / Math.cos(this.lat_ts);
+  }
+  else {
+    var qs = qsfnz(this.e, Math.sin(lat));
+    x = this.x0 + this.a * this.k0 * dlon;
+    y = this.y0 + this.a * qs * 0.5 / this.k0;
+  }
+
+  p.x = x;
+  p.y = y;
+  return p;
+};
+
+/* Cylindrical Equal Area inverse equations--mapping x,y to lat/long
+    ------------------------------------------------------------*/
+exports.inverse = function(p) {
+  p.x -= this.x0;
+  p.y -= this.y0;
+  var lon, lat;
+
+  if (this.sphere) {
+    lon = adjust_lon(this.long0 + (p.x / this.a) / Math.cos(this.lat_ts));
+    lat = Math.asin((p.y / this.a) * Math.cos(this.lat_ts));
+  }
+  else {
+    lat = iqsfnz(this.e, 2 * p.y * this.k0 / this.a);
+    lon = adjust_lon(this.long0 + p.x / (this.a * this.k0));
+  }
+
+  p.x = lon;
+  p.y = lat;
+  return p;
+};
+exports.names = ["cea"];
+
+},{"../common/adjust_lon":5,"../common/iqsfnz":13,"../common/msfnz":15,"../common/qsfnz":20}],43:[function(_dereq_,module,exports){
+var adjust_lon = _dereq_('../common/adjust_lon');
+var adjust_lat = _dereq_('../common/adjust_lat');
+exports.init = function() {
+
+  this.x0 = this.x0 || 0;
+  this.y0 = this.y0 || 0;
+  this.lat0 = this.lat0 || 0;
+  this.long0 = this.long0 || 0;
+  this.lat_ts = this.lat_ts || 0;
+  this.title = this.title || "Equidistant Cylindrical (Plate Carre)";
+
+  this.rc = Math.cos(this.lat_ts);
+};
+
+
+// forward equations--mapping lat,long to x,y
+// -----------------------------------------------------------------
+exports.forward = function(p) {
+
+  var lon = p.x;
+  var lat = p.y;
+
+  var dlon = adjust_lon(lon - this.long0);
+  var dlat = adjust_lat(lat - this.lat0);
+  p.x = this.x0 + (this.a * dlon * this.rc);
+  p.y = this.y0 + (this.a * dlat);
+  return p;
+};
+
+// inverse equations--mapping x,y to lat/long
+// -----------------------------------------------------------------
+exports.inverse = function(p) {
+
+  var x = p.x;
+  var y = p.y;
+
+  p.x = adjust_lon(this.long0 + ((x - this.x0) / (this.a * this.rc)));
+  p.y = adjust_lat(this.lat0 + ((y - this.y0) / (this.a)));
+  return p;
+};
+exports.names = ["Equirectangular", "Equidistant_Cylindrical", "eqc"];
+
+},{"../common/adjust_lat":4,"../common/adjust_lon":5}],44:[function(_dereq_,module,exports){
+var e0fn = _dereq_('../common/e0fn');
+var e1fn = _dereq_('../common/e1fn');
+var e2fn = _dereq_('../common/e2fn');
+var e3fn = _dereq_('../common/e3fn');
+var msfnz = _dereq_('../common/msfnz');
+var mlfn = _dereq_('../common/mlfn');
+var adjust_lon = _dereq_('../common/adjust_lon');
+var adjust_lat = _dereq_('../common/adjust_lat');
+var imlfn = _dereq_('../common/imlfn');
+var EPSLN = 1.0e-10;
+exports.init = function() {
+
+  /* Place parameters in static storage for common use
+      -------------------------------------------------*/
+  // Standard Parallels cannot be equal and on opposite sides of the equator
+  if (Math.abs(this.lat1 + this.lat2) < EPSLN) {
+    return;
+  }
+  this.lat2 = this.lat2 || this.lat1;
+  this.temp = this.b / this.a;
+  this.es = 1 - Math.pow(this.temp, 2);
+  this.e = Math.sqrt(this.es);
+  this.e0 = e0fn(this.es);
+  this.e1 = e1fn(this.es);
+  this.e2 = e2fn(this.es);
+  this.e3 = e3fn(this.es);
+
+  this.sinphi = Math.sin(this.lat1);
+  this.cosphi = Math.cos(this.lat1);
+
+  this.ms1 = msfnz(this.e, this.sinphi, this.cosphi);
+  this.ml1 = mlfn(this.e0, this.e1, this.e2, this.e3, this.lat1);
+
+  if (Math.abs(this.lat1 - this.lat2) < EPSLN) {
+    this.ns = this.sinphi;
+  }
+  else {
+    this.sinphi = Math.sin(this.lat2);
+    this.cosphi = Math.cos(this.lat2);
+    this.ms2 = msfnz(this.e, this.sinphi, this.cosphi);
+    this.ml2 = mlfn(this.e0, this.e1, this.e2, this.e3, this.lat2);
+    this.ns = (this.ms1 - this.ms2) / (this.ml2 - this.ml1);
+  }
+  this.g = this.ml1 + this.ms1 / this.ns;
+  this.ml0 = mlfn(this.e0, this.e1, this.e2, this.e3, this.lat0);
+  this.rh = this.a * (this.g - this.ml0);
+};
+
+
+/* Equidistant Conic forward equations--mapping lat,long to x,y
+  -----------------------------------------------------------*/
+exports.forward = function(p) {
+  var lon = p.x;
+  var lat = p.y;
+  var rh1;
+
+  /* Forward equations
+      -----------------*/
+  if (this.sphere) {
+    rh1 = this.a * (this.g - lat);
+  }
+  else {
+    var ml = mlfn(this.e0, this.e1, this.e2, this.e3, lat);
+    rh1 = this.a * (this.g - ml);
+  }
+  var theta = this.ns * adjust_lon(lon - this.long0);
+  var x = this.x0 + rh1 * Math.sin(theta);
+  var y = this.y0 + this.rh - rh1 * Math.cos(theta);
+  p.x = x;
+  p.y = y;
+  return p;
+};
+
+/* Inverse equations
+  -----------------*/
+exports.inverse = function(p) {
+  p.x -= this.x0;
+  p.y = this.rh - p.y + this.y0;
+  var con, rh1, lat, lon;
+  if (this.ns >= 0) {
+    rh1 = Math.sqrt(p.x * p.x + p.y * p.y);
+    con = 1;
+  }
+  else {
+    rh1 = -Math.sqrt(p.x * p.x + p.y * p.y);
+    con = -1;
+  }
+  var theta = 0;
+  if (rh1 !== 0) {
+    theta = Math.atan2(con * p.x, con * p.y);
+  }
+
+  if (this.sphere) {
+    lon = adjust_lon(this.long0 + theta / this.ns);
+    lat = adjust_lat(this.g - rh1 / this.a);
+    p.x = lon;
+    p.y = lat;
+    return p;
+  }
+  else {
+    var ml = this.g - rh1 / this.a;
+    lat = imlfn(ml, this.e0, this.e1, this.e2, this.e3);
+    lon = adjust_lon(this.long0 + theta / this.ns);
+    p.x = lon;
+    p.y = lat;
+    return p;
+  }
+
+};
+exports.names = ["Equidistant_Conic", "eqdc"];
+
+},{"../common/adjust_lat":4,"../common/adjust_lon":5,"../common/e0fn":7,"../common/e1fn":8,"../common/e2fn":9,"../common/e3fn":10,"../common/imlfn":12,"../common/mlfn":14,"../common/msfnz":15}],45:[function(_dereq_,module,exports){
+var FORTPI = Math.PI/4;
+var srat = _dereq_('../common/srat');
+var HALF_PI = Math.PI/2;
+var MAX_ITER = 20;
+exports.init = function() {
+  var sphi = Math.sin(this.lat0);
+  var cphi = Math.cos(this.lat0);
+  cphi *= cphi;
+  this.rc = Math.sqrt(1 - this.es) / (1 - this.es * sphi * sphi);
+  this.C = Math.sqrt(1 + this.es * cphi * cphi / (1 - this.es));
+  this.phic0 = Math.asin(sphi / this.C);
+  this.ratexp = 0.5 * this.C * this.e;
+  this.K = Math.tan(0.5 * this.phic0 + FORTPI) / (Math.pow(Math.tan(0.5 * this.lat0 + FORTPI), this.C) * srat(this.e * sphi, this.ratexp));
+};
+
+exports.forward = function(p) {
+  var lon = p.x;
+  var lat = p.y;
+
+  p.y = 2 * Math.atan(this.K * Math.pow(Math.tan(0.5 * lat + FORTPI), this.C) * srat(this.e * Math.sin(lat), this.ratexp)) - HALF_PI;
+  p.x = this.C * lon;
+  return p;
+};
+
+exports.inverse = function(p) {
+  var DEL_TOL = 1e-14;
+  var lon = p.x / this.C;
+  var lat = p.y;
+  var num = Math.pow(Math.tan(0.5 * lat + FORTPI) / this.K, 1 / this.C);
+  for (var i = MAX_ITER; i > 0; --i) {
+    lat = 2 * Math.atan(num * srat(this.e * Math.sin(p.y), - 0.5 * this.e)) - HALF_PI;
+    if (Math.abs(lat - p.y) < DEL_TOL) {
+      break;
+    }
+    p.y = lat;
+  }
+  /* convergence failed */
+  if (!i) {
+    return null;
+  }
+  p.x = lon;
+  p.y = lat;
+  return p;
+};
+exports.names = ["gauss"];
+
+},{"../common/srat":22}],46:[function(_dereq_,module,exports){
+var adjust_lon = _dereq_('../common/adjust_lon');
+var EPSLN = 1.0e-10;
+var asinz = _dereq_('../common/asinz');
+
+/*
+  reference:
+    Wolfram Mathworld "Gnomonic Projection"
+    http://mathworld.wolfram.com/GnomonicProjection.html
+    Accessed: 12th November 2009
+  */
+exports.init = function() {
+
+  /* Place parameters in static storage for common use
+      -------------------------------------------------*/
+  this.sin_p14 = Math.sin(this.lat0);
+  this.cos_p14 = Math.cos(this.lat0);
+  // Approximation for projecting points to the horizon (infinity)
+  this.infinity_dist = 1000 * this.a;
+  this.rc = 1;
+};
+
+
+/* Gnomonic forward equations--mapping lat,long to x,y
+    ---------------------------------------------------*/
+exports.forward = function(p) {
+  var sinphi, cosphi; /* sin and cos value        */
+  var dlon; /* delta longitude value      */
+  var coslon; /* cos of longitude        */
+  var ksp; /* scale factor          */
+  var g;
+  var x, y;
+  var lon = p.x;
+  var lat = p.y;
+  /* Forward equations
+      -----------------*/
+  dlon = adjust_lon(lon - this.long0);
+
+  sinphi = Math.sin(lat);
+  cosphi = Math.cos(lat);
+
+  coslon = Math.cos(dlon);
+  g = this.sin_p14 * sinphi + this.cos_p14 * cosphi * coslon;
+  ksp = 1;
+  if ((g > 0) || (Math.abs(g) <= EPSLN)) {
+    x = this.x0 + this.a * ksp * cosphi * Math.sin(dlon) / g;
+    y = this.y0 + this.a * ksp * (this.cos_p14 * sinphi - this.sin_p14 * cosphi * coslon) / g;
+  }
+  else {
+
+    // Point is in the opposing hemisphere and is unprojectable
+    // We still need to return a reasonable point, so we project 
+    // to infinity, on a bearing 
+    // equivalent to the northern hemisphere equivalent
+    // This is a reasonable approximation for short shapes and lines that 
+    // straddle the horizon.
+
+    x = this.x0 + this.infinity_dist * cosphi * Math.sin(dlon);
+    y = this.y0 + this.infinity_dist * (this.cos_p14 * sinphi - this.sin_p14 * cosphi * coslon);
+
+  }
+  p.x = x;
+  p.y = y;
+  return p;
+};
+
+
+exports.inverse = function(p) {
+  var rh; /* Rho */
+  var sinc, cosc;
+  var c;
+  var lon, lat;
+
+  /* Inverse equations
+      -----------------*/
+  p.x = (p.x - this.x0) / this.a;
+  p.y = (p.y - this.y0) / this.a;
+
+  p.x /= this.k0;
+  p.y /= this.k0;
+
+  if ((rh = Math.sqrt(p.x * p.x + p.y * p.y))) {
+    c = Math.atan2(rh, this.rc);
+    sinc = Math.sin(c);
+    cosc = Math.cos(c);
+
+    lat = asinz(cosc * this.sin_p14 + (p.y * sinc * this.cos_p14) / rh);
+    lon = Math.atan2(p.x * sinc, rh * this.cos_p14 * cosc - p.y * this.sin_p14 * sinc);
+    lon = adjust_lon(this.long0 + lon);
+  }
+  else {
+    lat = this.phic0;
+    lon = 0;
+  }
+
+  p.x = lon;
+  p.y = lat;
+  return p;
+};
+exports.names = ["gnom"];
+
+},{"../common/adjust_lon":5,"../common/asinz":6}],47:[function(_dereq_,module,exports){
+var adjust_lon = _dereq_('../common/adjust_lon');
+exports.init = function() {
+  this.a = 6377397.155;
+  this.es = 0.006674372230614;
+  this.e = Math.sqrt(this.es);
+  if (!this.lat0) {
+    this.lat0 = 0.863937979737193;
+  }
+  if (!this.long0) {
+    this.long0 = 0.7417649320975901 - 0.308341501185665;
+  }
+  /* if scale not set default to 0.9999 */
+  if (!this.k0) {
+    this.k0 = 0.9999;
+  }
+  this.s45 = 0.785398163397448; /* 45 */
+  this.s90 = 2 * this.s45;
+  this.fi0 = this.lat0;
+  this.e2 = this.es;
+  this.e = Math.sqrt(this.e2);
+  this.alfa = Math.sqrt(1 + (this.e2 * Math.pow(Math.cos(this.fi0), 4)) / (1 - this.e2));
+  this.uq = 1.04216856380474;
+  this.u0 = Math.asin(Math.sin(this.fi0) / this.alfa);
+  this.g = Math.pow((1 + this.e * Math.sin(this.fi0)) / (1 - this.e * Math.sin(this.fi0)), this.alfa * this.e / 2);
+  this.k = Math.tan(this.u0 / 2 + this.s45) / Math.pow(Math.tan(this.fi0 / 2 + this.s45), this.alfa) * this.g;
+  this.k1 = this.k0;
+  this.n0 = this.a * Math.sqrt(1 - this.e2) / (1 - this.e2 * Math.pow(Math.sin(this.fi0), 2));
+  this.s0 = 1.37008346281555;
+  this.n = Math.sin(this.s0);
+  this.ro0 = this.k1 * this.n0 / Math.tan(this.s0);
+  this.ad = this.s90 - this.uq;
+};
+
+/* ellipsoid */
+/* calculate xy from lat/lon */
+/* Constants, identical to inverse transform function */
+exports.forward = function(p) {
+  var gfi, u, deltav, s, d, eps, ro;
+  var lon = p.x;
+  var lat = p.y;
+  var delta_lon = adjust_lon(lon - this.long0);
+  /* Transformation */
+  gfi = Math.pow(((1 + this.e * Math.sin(lat)) / (1 - this.e * Math.sin(lat))), (this.alfa * this.e / 2));
+  u = 2 * (Math.atan(this.k * Math.pow(Math.tan(lat / 2 + this.s45), this.alfa) / gfi) - this.s45);
+  deltav = -delta_lon * this.alfa;
+  s = Math.asin(Math.cos(this.ad) * Math.sin(u) + Math.sin(this.ad) * Math.cos(u) * Math.cos(deltav));
+  d = Math.asin(Math.cos(u) * Math.sin(deltav) / Math.cos(s));
+  eps = this.n * d;
+  ro = this.ro0 * Math.pow(Math.tan(this.s0 / 2 + this.s45), this.n) / Math.pow(Math.tan(s / 2 + this.s45), this.n);
+  p.y = ro * Math.cos(eps) / 1;
+  p.x = ro * Math.sin(eps) / 1;
+
+  if (!this.czech) {
+    p.y *= -1;
+    p.x *= -1;
+  }
+  return (p);
+};
+
+/* calculate lat/lon from xy */
+exports.inverse = function(p) {
+  var u, deltav, s, d, eps, ro, fi1;
+  var ok;
+
+  /* Transformation */
+  /* revert y, x*/
+  var tmp = p.x;
+  p.x = p.y;
+  p.y = tmp;
+  if (!this.czech) {
+    p.y *= -1;
+    p.x *= -1;
+  }
+  ro = Math.sqrt(p.x * p.x + p.y * p.y);
+  eps = Math.atan2(p.y, p.x);
+  d = eps / Math.sin(this.s0);
+  s = 2 * (Math.atan(Math.pow(this.ro0 / ro, 1 / this.n) * Math.tan(this.s0 / 2 + this.s45)) - this.s45);
+  u = Math.asin(Math.cos(this.ad) * Math.sin(s) - Math.sin(this.ad) * Math.cos(s) * Math.cos(d));
+  deltav = Math.asin(Math.cos(s) * Math.sin(d) / Math.cos(u));
+  p.x = this.long0 - deltav / this.alfa;
+  fi1 = u;
+  ok = 0;
+  var iter = 0;
+  do {
+    p.y = 2 * (Math.atan(Math.pow(this.k, - 1 / this.alfa) * Math.pow(Math.tan(u / 2 + this.s45), 1 / this.alfa) * Math.pow((1 + this.e * Math.sin(fi1)) / (1 - this.e * Math.sin(fi1)), this.e / 2)) - this.s45);
+    if (Math.abs(fi1 - p.y) < 0.0000000001) {
+      ok = 1;
+    }
+    fi1 = p.y;
+    iter += 1;
+  } while (ok === 0 && iter < 15);
+  if (iter >= 15) {
+    return null;
+  }
+
+  return (p);
+};
+exports.names = ["Krovak", "krovak"];
+
+},{"../common/adjust_lon":5}],48:[function(_dereq_,module,exports){
+var HALF_PI = Math.PI/2;
+var FORTPI = Math.PI/4;
+var EPSLN = 1.0e-10;
+var qsfnz = _dereq_('../common/qsfnz');
+var adjust_lon = _dereq_('../common/adjust_lon');
+/*
+  reference
+    "New Equal-Area Map Projections for Noncircular Regions", John P. Snyder,
+    The American Cartographer, Vol 15, No. 4, October 1988, pp. 341-355.
+  */
+
+exports.S_POLE = 1;
+exports.N_POLE = 2;
+exports.EQUIT = 3;
+exports.OBLIQ = 4;
+
+
+/* Initialize the Lambert Azimuthal Equal Area projection
+  ------------------------------------------------------*/
+exports.init = function() {
+  var t = Math.abs(this.lat0);
+  if (Math.abs(t - HALF_PI) < EPSLN) {
+    this.mode = this.lat0 < 0 ? this.S_POLE : this.N_POLE;
+  }
+  else if (Math.abs(t) < EPSLN) {
+    this.mode = this.EQUIT;
+  }
+  else {
+    this.mode = this.OBLIQ;
+  }
+  if (this.es > 0) {
+    var sinphi;
+
+    this.qp = qsfnz(this.e, 1);
+    this.mmf = 0.5 / (1 - this.es);
+    this.apa = this.authset(this.es);
+    switch (this.mode) {
+    case this.N_POLE:
+      this.dd = 1;
+      break;
+    case this.S_POLE:
+      this.dd = 1;
+      break;
+    case this.EQUIT:
+      this.rq = Math.sqrt(0.5 * this.qp);
+      this.dd = 1 / this.rq;
+      this.xmf = 1;
+      this.ymf = 0.5 * this.qp;
+      break;
+    case this.OBLIQ:
+      this.rq = Math.sqrt(0.5 * this.qp);
+      sinphi = Math.sin(this.lat0);
+      this.sinb1 = qsfnz(this.e, sinphi) / this.qp;
+      this.cosb1 = Math.sqrt(1 - this.sinb1 * this.sinb1);
+      this.dd = Math.cos(this.lat0) / (Math.sqrt(1 - this.es * sinphi * sinphi) * this.rq * this.cosb1);
+      this.ymf = (this.xmf = this.rq) / this.dd;
+      this.xmf *= this.dd;
+      break;
+    }
+  }
+  else {
+    if (this.mode === this.OBLIQ) {
+      this.sinph0 = Math.sin(this.lat0);
+      this.cosph0 = Math.cos(this.lat0);
+    }
+  }
+};
+
+/* Lambert Azimuthal Equal Area forward equations--mapping lat,long to x,y
+  -----------------------------------------------------------------------*/
+exports.forward = function(p) {
+
+  /* Forward equations
+      -----------------*/
+  var x, y, coslam, sinlam, sinphi, q, sinb, cosb, b, cosphi;
+  var lam = p.x;
+  var phi = p.y;
+
+  lam = adjust_lon(lam - this.long0);
+
+  if (this.sphere) {
+    sinphi = Math.sin(phi);
+    cosphi = Math.cos(phi);
+    coslam = Math.cos(lam);
+    if (this.mode === this.OBLIQ || this.mode === this.EQUIT) {
+      y = (this.mode === this.EQUIT) ? 1 + cosphi * coslam : 1 + this.sinph0 * sinphi + this.cosph0 * cosphi * coslam;
+      if (y <= EPSLN) {
+        return null;
+      }
+      y = Math.sqrt(2 / y);
+      x = y * cosphi * Math.sin(lam);
+      y *= (this.mode === this.EQUIT) ? sinphi : this.cosph0 * sinphi - this.sinph0 * cosphi * coslam;
+    }
+    else if (this.mode === this.N_POLE || this.mode === this.S_POLE) {
+      if (this.mode === this.N_POLE) {
+        coslam = -coslam;
+      }
+      if (Math.abs(phi + this.phi0) < EPSLN) {
+        return null;
+      }
+      y = FORTPI - phi * 0.5;
+      y = 2 * ((this.mode === this.S_POLE) ? Math.cos(y) : Math.sin(y));
+      x = y * Math.sin(lam);
+      y *= coslam;
+    }
+  }
+  else {
+    sinb = 0;
+    cosb = 0;
+    b = 0;
+    coslam = Math.cos(lam);
+    sinlam = Math.sin(lam);
+    sinphi = Math.sin(phi);
+    q = qsfnz(this.e, sinphi);
+    if (this.mode === this.OBLIQ || this.mode === this.EQUIT) {
+      sinb = q / this.qp;
+      cosb = Math.sqrt(1 - sinb * sinb);
+    }
+    switch (this.mode) {
+    case this.OBLIQ:
+      b = 1 + this.sinb1 * sinb + this.cosb1 * cosb * coslam;
+      break;
+    case this.EQUIT:
+      b = 1 + cosb * coslam;
+      break;
+    case this.N_POLE:
+      b = HALF_PI + phi;
+      q = this.qp - q;
+      break;
+    case this.S_POLE:
+      b = phi - HALF_PI;
+      q = this.qp + q;
+      break;
+    }
+    if (Math.abs(b) < EPSLN) {
+      return null;
+    }
+    switch (this.mode) {
+    case this.OBLIQ:
+    case this.EQUIT:
+      b = Math.sqrt(2 / b);
+      if (this.mode === this.OBLIQ) {
+        y = this.ymf * b * (this.cosb1 * sinb - this.sinb1 * cosb * coslam);
+      }
+      else {
+        y = (b = Math.sqrt(2 / (1 + cosb * coslam))) * sinb * this.ymf;
+      }
+      x = this.xmf * b * cosb * sinlam;
+      break;
+    case this.N_POLE:
+    case this.S_POLE:
+      if (q >= 0) {
+        x = (b = Math.sqrt(q)) * sinlam;
+        y = coslam * ((this.mode === this.S_POLE) ? b : -b);
+      }
+      else {
+        x = y = 0;
+      }
+      break;
+    }
+  }
+
+  p.x = this.a * x + this.x0;
+  p.y = this.a * y + this.y0;
+  return p;
+};
+
+/* Inverse equations
+  -----------------*/
+exports.inverse = function(p) {
+  p.x -= this.x0;
+  p.y -= this.y0;
+  var x = p.x / this.a;
+  var y = p.y / this.a;
+  var lam, phi, cCe, sCe, q, rho, ab;
+
+  if (this.sphere) {
+    var cosz = 0,
+      rh, sinz = 0;
+
+    rh = Math.sqrt(x * x + y * y);
+    phi = rh * 0.5;
+    if (phi > 1) {
+      return null;
+    }
+    phi = 2 * Math.asin(phi);
+    if (this.mode === this.OBLIQ || this.mode === this.EQUIT) {
+      sinz = Math.sin(phi);
+      cosz = Math.cos(phi);
+    }
+    switch (this.mode) {
+    case this.EQUIT:
+      phi = (Math.abs(rh) <= EPSLN) ? 0 : Math.asin(y * sinz / rh);
+      x *= sinz;
+      y = cosz * rh;
+      break;
+    case this.OBLIQ:
+      phi = (Math.abs(rh) <= EPSLN) ? this.phi0 : Math.asin(cosz * this.sinph0 + y * sinz * this.cosph0 / rh);
+      x *= sinz * this.cosph0;
+      y = (cosz - Math.sin(phi) * this.sinph0) * rh;
+      break;
+    case this.N_POLE:
+      y = -y;
+      phi = HALF_PI - phi;
+      break;
+    case this.S_POLE:
+      phi -= HALF_PI;
+      break;
+    }
+    lam = (y === 0 && (this.mode === this.EQUIT || this.mode === this.OBLIQ)) ? 0 : Math.atan2(x, y);
+  }
+  else {
+    ab = 0;
+    if (this.mode === this.OBLIQ || this.mode === this.EQUIT) {
+      x /= this.dd;
+      y *= this.dd;
+      rho = Math.sqrt(x * x + y * y);
+      if (rho < EPSLN) {
+        p.x = 0;
+        p.y = this.phi0;
+        return p;
+      }
+      sCe = 2 * Math.asin(0.5 * rho / this.rq);
+      cCe = Math.cos(sCe);
+      x *= (sCe = Math.sin(sCe));
+      if (this.mode === this.OBLIQ) {
+        ab = cCe * this.sinb1 + y * sCe * this.cosb1 / rho;
+        q = this.qp * ab;
+        y = rho * this.cosb1 * cCe - y * this.sinb1 * sCe;
+      }
+      else {
+        ab = y * sCe / rho;
+        q = this.qp * ab;
+        y = rho * cCe;
+      }
+    }
+    else if (this.mode === this.N_POLE || this.mode === this.S_POLE) {
+      if (this.mode === this.N_POLE) {
+        y = -y;
+      }
+      q = (x * x + y * y);
+      if (!q) {
+        p.x = 0;
+        p.y = this.phi0;
+        return p;
+      }
+      ab = 1 - q / this.qp;
+      if (this.mode === this.S_POLE) {
+        ab = -ab;
+      }
+    }
+    lam = Math.atan2(x, y);
+    phi = this.authlat(Math.asin(ab), this.apa);
+  }
+
+
+  p.x = adjust_lon(this.long0 + lam);
+  p.y = phi;
+  return p;
+};
+
+/* determine latitude from authalic latitude */
+exports.P00 = 0.33333333333333333333;
+exports.P01 = 0.17222222222222222222;
+exports.P02 = 0.10257936507936507936;
+exports.P10 = 0.06388888888888888888;
+exports.P11 = 0.06640211640211640211;
+exports.P20 = 0.01641501294219154443;
+
+exports.authset = function(es) {
+  var t;
+  var APA = [];
+  APA[0] = es * this.P00;
+  t = es * es;
+  APA[0] += t * this.P01;
+  APA[1] = t * this.P10;
+  t *= es;
+  APA[0] += t * this.P02;
+  APA[1] += t * this.P11;
+  APA[2] = t * this.P20;
+  return APA;
+};
+
+exports.authlat = function(beta, APA) {
+  var t = beta + beta;
+  return (beta + APA[0] * Math.sin(t) + APA[1] * Math.sin(t + t) + APA[2] * Math.sin(t + t + t));
+};
+exports.names = ["Lambert Azimuthal Equal Area", "Lambert_Azimuthal_Equal_Area", "laea"];
+
+},{"../common/adjust_lon":5,"../common/qsfnz":20}],49:[function(_dereq_,module,exports){
+var EPSLN = 1.0e-10;
+var msfnz = _dereq_('../common/msfnz');
+var tsfnz = _dereq_('../common/tsfnz');
+var HALF_PI = Math.PI/2;
+var sign = _dereq_('../common/sign');
+var adjust_lon = _dereq_('../common/adjust_lon');
+var phi2z = _dereq_('../common/phi2z');
+exports.init = function() {
+
+  // array of:  r_maj,r_min,lat1,lat2,c_lon,c_lat,false_east,false_north
+  //double c_lat;                   /* center latitude                      */
+  //double c_lon;                   /* center longitude                     */
+  //double lat1;                    /* first standard parallel              */
+  //double lat2;                    /* second standard parallel             */
+  //double r_maj;                   /* major axis                           */
+  //double r_min;                   /* minor axis                           */
+  //double false_east;              /* x offset in meters                   */
+  //double false_north;             /* y offset in meters                   */
+
+  if (!this.lat2) {
+    this.lat2 = this.lat1;
+  } //if lat2 is not defined
+  if (!this.k0) {
+    this.k0 = 1;
+  }
+  this.x0 = this.x0 || 0;
+  this.y0 = this.y0 || 0;
+  // Standard Parallels cannot be equal and on opposite sides of the equator
+  if (Math.abs(this.lat1 + this.lat2) < EPSLN) {
+    return;
+  }
+
+  var temp = this.b / this.a;
+  this.e = Math.sqrt(1 - temp * temp);
+
+  var sin1 = Math.sin(this.lat1);
+  var cos1 = Math.cos(this.lat1);
+  var ms1 = msfnz(this.e, sin1, cos1);
+  var ts1 = tsfnz(this.e, this.lat1, sin1);
+
+  var sin2 = Math.sin(this.lat2);
+  var cos2 = Math.cos(this.lat2);
+  var ms2 = msfnz(this.e, sin2, cos2);
+  var ts2 = tsfnz(this.e, this.lat2, sin2);
+
+  var ts0 = tsfnz(this.e, this.lat0, Math.sin(this.lat0));
+
+  if (Math.abs(this.lat1 - this.lat2) > EPSLN) {
+    this.ns = Math.log(ms1 / ms2) / Math.log(ts1 / ts2);
+  }
+  else {
+    this.ns = sin1;
+  }
+  if (isNaN(this.ns)) {
+    this.ns = sin1;
+  }
+  this.f0 = ms1 / (this.ns * Math.pow(ts1, this.ns));
+  this.rh = this.a * this.f0 * Math.pow(ts0, this.ns);
+  if (!this.title) {
+    this.title = "Lambert Conformal Conic";
+  }
+};
+
+
+// Lambert Conformal conic forward equations--mapping lat,long to x,y
+// -----------------------------------------------------------------
+exports.forward = function(p) {
+
+  var lon = p.x;
+  var lat = p.y;
+
+  // singular cases :
+  if (Math.abs(2 * Math.abs(lat) - Math.PI) <= EPSLN) {
+    lat = sign(lat) * (HALF_PI - 2 * EPSLN);
+  }
+
+  var con = Math.abs(Math.abs(lat) - HALF_PI);
+  var ts, rh1;
+  if (con > EPSLN) {
+    ts = tsfnz(this.e, lat, Math.sin(lat));
+    rh1 = this.a * this.f0 * Math.pow(ts, this.ns);
+  }
+  else {
+    con = lat * this.ns;
+    if (con <= 0) {
+      return null;
+    }
+    rh1 = 0;
+  }
+  var theta = this.ns * adjust_lon(lon - this.long0);
+  p.x = this.k0 * (rh1 * Math.sin(theta)) + this.x0;
+  p.y = this.k0 * (this.rh - rh1 * Math.cos(theta)) + this.y0;
+
+  return p;
+};
+
+// Lambert Conformal Conic inverse equations--mapping x,y to lat/long
+// -----------------------------------------------------------------
+exports.inverse = function(p) {
+
+  var rh1, con, ts;
+  var lat, lon;
+  var x = (p.x - this.x0) / this.k0;
+  var y = (this.rh - (p.y - this.y0) / this.k0);
+  if (this.ns > 0) {
+    rh1 = Math.sqrt(x * x + y * y);
+    con = 1;
+  }
+  else {
+    rh1 = -Math.sqrt(x * x + y * y);
+    con = -1;
+  }
+  var theta = 0;
+  if (rh1 !== 0) {
+    theta = Math.atan2((con * x), (con * y));
+  }
+  if ((rh1 !== 0) || (this.ns > 0)) {
+    con = 1 / this.ns;
+    ts = Math.pow((rh1 / (this.a * this.f0)), con);
+    lat = phi2z(this.e, ts);
+    if (lat === -9999) {
+      return null;
+    }
+  }
+  else {
+    lat = -HALF_PI;
+  }
+  lon = adjust_lon(theta / this.ns + this.long0);
+
+  p.x = lon;
+  p.y = lat;
+  return p;
+};
+
+exports.names = ["Lambert Tangential Conformal Conic Projection", "Lambert_Conformal_Conic", "Lambert_Conformal_Conic_2SP", "lcc"];
+
+},{"../common/adjust_lon":5,"../common/msfnz":15,"../common/phi2z":16,"../common/sign":21,"../common/tsfnz":24}],50:[function(_dereq_,module,exports){
+exports.init = function() {
+  //no-op for longlat
+};
+
+function identity(pt) {
+  return pt;
+}
+exports.forward = identity;
+exports.inverse = identity;
+exports.names = ["longlat", "identity"];
+
+},{}],51:[function(_dereq_,module,exports){
+var msfnz = _dereq_('../common/msfnz');
+var HALF_PI = Math.PI/2;
+var EPSLN = 1.0e-10;
+var R2D = 57.29577951308232088;
+var adjust_lon = _dereq_('../common/adjust_lon');
+var FORTPI = Math.PI/4;
+var tsfnz = _dereq_('../common/tsfnz');
+var phi2z = _dereq_('../common/phi2z');
+exports.init = function() {
+  var con = this.b / this.a;
+  this.es = 1 - con * con;
+  if(!('x0' in this)){
+    this.x0 = 0;
+  }
+  if(!('y0' in this)){
+    this.y0 = 0;
+  }
+  this.e = Math.sqrt(this.es);
+  if (this.lat_ts) {
+    if (this.sphere) {
+      this.k0 = Math.cos(this.lat_ts);
+    }
+    else {
+      this.k0 = msfnz(this.e, Math.sin(this.lat_ts), Math.cos(this.lat_ts));
+    }
+  }
+  else {
+    if (!this.k0) {
+      if (this.k) {
+        this.k0 = this.k;
+      }
+      else {
+        this.k0 = 1;
+      }
+    }
+  }
+};
+
+/* Mercator forward equations--mapping lat,long to x,y
+  --------------------------------------------------*/
+
+exports.forward = function(p) {
+  var lon = p.x;
+  var lat = p.y;
+  // convert to radians
+  if (lat * R2D > 90 && lat * R2D < -90 && lon * R2D > 180 && lon * R2D < -180) {
+    return null;
+  }
+
+  var x, y;
+  if (Math.abs(Math.abs(lat) - HALF_PI) <= EPSLN) {
+    return null;
+  }
+  else {
+    if (this.sphere) {
+      x = this.x0 + this.a * this.k0 * adjust_lon(lon - this.long0);
+      y = this.y0 + this.a * this.k0 * Math.log(Math.tan(FORTPI + 0.5 * lat));
+    }
+    else {
+      var sinphi = Math.sin(lat);
+      var ts = tsfnz(this.e, lat, sinphi);
+      x = this.x0 + this.a * this.k0 * adjust_lon(lon - this.long0);
+      y = this.y0 - this.a * this.k0 * Math.log(ts);
+    }
+    p.x = x;
+    p.y = y;
+    return p;
+  }
+};
+
+
+/* Mercator inverse equations--mapping x,y to lat/long
+  --------------------------------------------------*/
+exports.inverse = function(p) {
+
+  var x = p.x - this.x0;
+  var y = p.y - this.y0;
+  var lon, lat;
+
+  if (this.sphere) {
+    lat = HALF_PI - 2 * Math.atan(Math.exp(-y / (this.a * this.k0)));
+  }
+  else {
+    var ts = Math.exp(-y / (this.a * this.k0));
+    lat = phi2z(this.e, ts);
+    if (lat === -9999) {
+      return null;
+    }
+  }
+  lon = adjust_lon(this.long0 + x / (this.a * this.k0));
+
+  p.x = lon;
+  p.y = lat;
+  return p;
+};
+
+exports.names = ["Mercator", "Popular Visualisation Pseudo Mercator", "Mercator_1SP", "Mercator_Auxiliary_Sphere", "merc"];
+
+},{"../common/adjust_lon":5,"../common/msfnz":15,"../common/phi2z":16,"../common/tsfnz":24}],52:[function(_dereq_,module,exports){
+var adjust_lon = _dereq_('../common/adjust_lon');
+/*
+  reference
+    "New Equal-Area Map Projections for Noncircular Regions", John P. Snyder,
+    The American Cartographer, Vol 15, No. 4, October 1988, pp. 341-355.
+  */
+
+
+/* Initialize the Miller Cylindrical projection
+  -------------------------------------------*/
+exports.init = function() {
+  //no-op
+};
+
+
+/* Miller Cylindrical forward equations--mapping lat,long to x,y
+    ------------------------------------------------------------*/
+exports.forward = function(p) {
+  var lon = p.x;
+  var lat = p.y;
+  /* Forward equations
+      -----------------*/
+  var dlon = adjust_lon(lon - this.long0);
+  var x = this.x0 + this.a * dlon;
+  var y = this.y0 + this.a * Math.log(Math.tan((Math.PI / 4) + (lat / 2.5))) * 1.25;
+
+  p.x = x;
+  p.y = y;
+  return p;
+};
+
+/* Miller Cylindrical inverse equations--mapping x,y to lat/long
+    ------------------------------------------------------------*/
+exports.inverse = function(p) {
+  p.x -= this.x0;
+  p.y -= this.y0;
+
+  var lon = adjust_lon(this.long0 + p.x / this.a);
+  var lat = 2.5 * (Math.atan(Math.exp(0.8 * p.y / this.a)) - Math.PI / 4);
+
+  p.x = lon;
+  p.y = lat;
+  return p;
+};
+exports.names = ["Miller_Cylindrical", "mill"];
+
+},{"../common/adjust_lon":5}],53:[function(_dereq_,module,exports){
+var adjust_lon = _dereq_('../common/adjust_lon');
+var EPSLN = 1.0e-10;
+exports.init = function() {};
+
+/* Mollweide forward equations--mapping lat,long to x,y
+    ----------------------------------------------------*/
+exports.forward = function(p) {
+
+  /* Forward equations
+      -----------------*/
+  var lon = p.x;
+  var lat = p.y;
+
+  var delta_lon = adjust_lon(lon - this.long0);
+  var theta = lat;
+  var con = Math.PI * Math.sin(lat);
+
+  /* Iterate using the Newton-Raphson method to find theta
+      -----------------------------------------------------*/
+  for (var i = 0; true; i++) {
+    var delta_theta = -(theta + Math.sin(theta) - con) / (1 + Math.cos(theta));
+    theta += delta_theta;
+    if (Math.abs(delta_theta) < EPSLN) {
+      break;
+    }
+  }
+  theta /= 2;
+
+  /* If the latitude is 90 deg, force the x coordinate to be "0 + false easting"
+       this is done here because of precision problems with "cos(theta)"
+       --------------------------------------------------------------------------*/
+  if (Math.PI / 2 - Math.abs(lat) < EPSLN) {
+    delta_lon = 0;
+  }
+  var x = 0.900316316158 * this.a * delta_lon * Math.cos(theta) + this.x0;
+  var y = 1.4142135623731 * this.a * Math.sin(theta) + this.y0;
+
+  p.x = x;
+  p.y = y;
+  return p;
+};
+
+exports.inverse = function(p) {
+  var theta;
+  var arg;
+
+  /* Inverse equations
+      -----------------*/
+  p.x -= this.x0;
+  p.y -= this.y0;
+  arg = p.y / (1.4142135623731 * this.a);
+
+  /* Because of division by zero problems, 'arg' can not be 1.  Therefore
+       a number very close to one is used instead.
+       -------------------------------------------------------------------*/
+  if (Math.abs(arg) > 0.999999999999) {
+    arg = 0.999999999999;
+  }
+  theta = Math.asin(arg);
+  var lon = adjust_lon(this.long0 + (p.x / (0.900316316158 * this.a * Math.cos(theta))));
+  if (lon < (-Math.PI)) {
+    lon = -Math.PI;
+  }
+  if (lon > Math.PI) {
+    lon = Math.PI;
+  }
+  arg = (2 * theta + Math.sin(2 * theta)) / Math.PI;
+  if (Math.abs(arg) > 1) {
+    arg = 1;
+  }
+  var lat = Math.asin(arg);
+
+  p.x = lon;
+  p.y = lat;
+  return p;
+};
+exports.names = ["Mollweide", "moll"];
+
+},{"../common/adjust_lon":5}],54:[function(_dereq_,module,exports){
+var SEC_TO_RAD = 4.84813681109535993589914102357e-6;
+/*
+  reference
+    Department of Land and Survey Technical Circular 1973/32
+      http://www.linz.govt.nz/docs/miscellaneous/nz-map-definition.pdf
+    OSG Technical Report 4.1
+      http://www.linz.govt.nz/docs/miscellaneous/nzmg.pdf
+  */
+
+/**
+ * iterations: Number of iterations to refine inverse transform.
+ *     0 -> km accuracy
+ *     1 -> m accuracy -- suitable for most mapping applications
+ *     2 -> mm accuracy
+ */
+exports.iterations = 1;
+
+exports.init = function() {
+  this.A = [];
+  this.A[1] = 0.6399175073;
+  this.A[2] = -0.1358797613;
+  this.A[3] = 0.063294409;
+  this.A[4] = -0.02526853;
+  this.A[5] = 0.0117879;
+  this.A[6] = -0.0055161;
+  this.A[7] = 0.0026906;
+  this.A[8] = -0.001333;
+  this.A[9] = 0.00067;
+  this.A[10] = -0.00034;
+
+  this.B_re = [];
+  this.B_im = [];
+  this.B_re[1] = 0.7557853228;
+  this.B_im[1] = 0;
+  this.B_re[2] = 0.249204646;
+  this.B_im[2] = 0.003371507;
+  this.B_re[3] = -0.001541739;
+  this.B_im[3] = 0.041058560;
+  this.B_re[4] = -0.10162907;
+  this.B_im[4] = 0.01727609;
+  this.B_re[5] = -0.26623489;
+  this.B_im[5] = -0.36249218;
+  this.B_re[6] = -0.6870983;
+  this.B_im[6] = -1.1651967;
+
+  this.C_re = [];
+  this.C_im = [];
+  this.C_re[1] = 1.3231270439;
+  this.C_im[1] = 0;
+  this.C_re[2] = -0.577245789;
+  this.C_im[2] = -0.007809598;
+  this.C_re[3] = 0.508307513;
+  this.C_im[3] = -0.112208952;
+  this.C_re[4] = -0.15094762;
+  this.C_im[4] = 0.18200602;
+  this.C_re[5] = 1.01418179;
+  this.C_im[5] = 1.64497696;
+  this.C_re[6] = 1.9660549;
+  this.C_im[6] = 2.5127645;
+
+  this.D = [];
+  this.D[1] = 1.5627014243;
+  this.D[2] = 0.5185406398;
+  this.D[3] = -0.03333098;
+  this.D[4] = -0.1052906;
+  this.D[5] = -0.0368594;
+  this.D[6] = 0.007317;
+  this.D[7] = 0.01220;
+  this.D[8] = 0.00394;
+  this.D[9] = -0.0013;
+};
+
+/**
+    New Zealand Map Grid Forward  - long/lat to x/y
+    long/lat in radians
+  */
+exports.forward = function(p) {
+  var n;
+  var lon = p.x;
+  var lat = p.y;
+
+  var delta_lat = lat - this.lat0;
+  var delta_lon = lon - this.long0;
+
+  // 1. Calculate d_phi and d_psi    ...                          // and d_lambda
+  // For this algorithm, delta_latitude is in seconds of arc x 10-5, so we need to scale to those units. Longitude is radians.
+  var d_phi = delta_lat / SEC_TO_RAD * 1E-5;
+  var d_lambda = delta_lon;
+  var d_phi_n = 1; // d_phi^0
+
+  var d_psi = 0;
+  for (n = 1; n <= 10; n++) {
+    d_phi_n = d_phi_n * d_phi;
+    d_psi = d_psi + this.A[n] * d_phi_n;
+  }
+
+  // 2. Calculate theta
+  var th_re = d_psi;
+  var th_im = d_lambda;
+
+  // 3. Calculate z
+  var th_n_re = 1;
+  var th_n_im = 0; // theta^0
+  var th_n_re1;
+  var th_n_im1;
+
+  var z_re = 0;
+  var z_im = 0;
+  for (n = 1; n <= 6; n++) {
+    th_n_re1 = th_n_re * th_re - th_n_im * th_im;
+    th_n_im1 = th_n_im * th_re + th_n_re * th_im;
+    th_n_re = th_n_re1;
+    th_n_im = th_n_im1;
+    z_re = z_re + this.B_re[n] * th_n_re - this.B_im[n] * th_n_im;
+    z_im = z_im + this.B_im[n] * th_n_re + this.B_re[n] * th_n_im;
+  }
+
+  // 4. Calculate easting and northing
+  p.x = (z_im * this.a) + this.x0;
+  p.y = (z_re * this.a) + this.y0;
+
+  return p;
+};
+
+
+/**
+    New Zealand Map Grid Inverse  -  x/y to long/lat
+  */
+exports.inverse = function(p) {
+  var n;
+  var x = p.x;
+  var y = p.y;
+
+  var delta_x = x - this.x0;
+  var delta_y = y - this.y0;
+
+  // 1. Calculate z
+  var z_re = delta_y / this.a;
+  var z_im = delta_x / this.a;
+
+  // 2a. Calculate theta - first approximation gives km accuracy
+  var z_n_re = 1;
+  var z_n_im = 0; // z^0
+  var z_n_re1;
+  var z_n_im1;
+
+  var th_re = 0;
+  var th_im = 0;
+  for (n = 1; n <= 6; n++) {
+    z_n_re1 = z_n_re * z_re - z_n_im * z_im;
+    z_n_im1 = z_n_im * z_re + z_n_re * z_im;
+    z_n_re = z_n_re1;
+    z_n_im = z_n_im1;
+    th_re = th_re + this.C_re[n] * z_n_re - this.C_im[n] * z_n_im;
+    th_im = th_im + this.C_im[n] * z_n_re + this.C_re[n] * z_n_im;
+  }
+
+  // 2b. Iterate to refine the accuracy of the calculation
+  //        0 iterations gives km accuracy
+  //        1 iteration gives m accuracy -- good enough for most mapping applications
+  //        2 iterations bives mm accuracy
+  for (var i = 0; i < this.iterations; i++) {
+    var th_n_re = th_re;
+    var th_n_im = th_im;
+    var th_n_re1;
+    var th_n_im1;
+
+    var num_re = z_re;
+    var num_im = z_im;
+    for (n = 2; n <= 6; n++) {
+      th_n_re1 = th_n_re * th_re - th_n_im * th_im;
+      th_n_im1 = th_n_im * th_re + th_n_re * th_im;
+      th_n_re = th_n_re1;
+      th_n_im = th_n_im1;
+      num_re = num_re + (n - 1) * (this.B_re[n] * th_n_re - this.B_im[n] * th_n_im);
+      num_im = num_im + (n - 1) * (this.B_im[n] * th_n_re + this.B_re[n] * th_n_im);
+    }
+
+    th_n_re = 1;
+    th_n_im = 0;
+    var den_re = this.B_re[1];
+    var den_im = this.B_im[1];
+    for (n = 2; n <= 6; n++) {
+      th_n_re1 = th_n_re * th_re - th_n_im * th_im;
+      th_n_im1 = th_n_im * th_re + th_n_re * th_im;
+      th_n_re = th_n_re1;
+      th_n_im = th_n_im1;
+      den_re = den_re + n * (this.B_re[n] * th_n_re - this.B_im[n] * th_n_im);
+      den_im = den_im + n * (this.B_im[n] * th_n_re + this.B_re[n] * th_n_im);
+    }
+
+    // Complex division
+    var den2 = den_re * den_re + den_im * den_im;
+    th_re = (num_re * den_re + num_im * den_im) / den2;
+    th_im = (num_im * den_re - num_re * den_im) / den2;
+  }
+
+  // 3. Calculate d_phi              ...                                    // and d_lambda
+  var d_psi = th_re;
+  var d_lambda = th_im;
+  var d_psi_n = 1; // d_psi^0
+
+  var d_phi = 0;
+  for (n = 1; n <= 9; n++) {
+    d_psi_n = d_psi_n * d_psi;
+    d_phi = d_phi + this.D[n] * d_psi_n;
+  }
+
+  // 4. Calculate latitude and longitude
+  // d_phi is calcuated in second of arc * 10^-5, so we need to scale back to radians. d_lambda is in radians.
+  var lat = this.lat0 + (d_phi * SEC_TO_RAD * 1E5);
+  var lon = this.long0 + d_lambda;
+
+  p.x = lon;
+  p.y = lat;
+
+  return p;
+};
+exports.names = ["New_Zealand_Map_Grid", "nzmg"];
+},{}],55:[function(_dereq_,module,exports){
+var tsfnz = _dereq_('../common/tsfnz');
+var adjust_lon = _dereq_('../common/adjust_lon');
+var phi2z = _dereq_('../common/phi2z');
+var HALF_PI = Math.PI/2;
+var FORTPI = Math.PI/4;
+var EPSLN = 1.0e-10;
+
+/* Initialize the Oblique Mercator  projection
+    ------------------------------------------*/
+exports.init = function() {
+  this.no_off = this.no_off || false;
+  this.no_rot = this.no_rot || false;
+
+  if (isNaN(this.k0)) {
+    this.k0 = 1;
+  }
+  var sinlat = Math.sin(this.lat0);
+  var coslat = Math.cos(this.lat0);
+  var con = this.e * sinlat;
+
+  this.bl = Math.sqrt(1 + this.es / (1 - this.es) * Math.pow(coslat, 4));
+  this.al = this.a * this.bl * this.k0 * Math.sqrt(1 - this.es) / (1 - con * con);
+  var t0 = tsfnz(this.e, this.lat0, sinlat);
+  var dl = this.bl / coslat * Math.sqrt((1 - this.es) / (1 - con * con));
+  if (dl * dl < 1) {
+    dl = 1;
+  }
+  var fl;
+  var gl;
+  if (!isNaN(this.longc)) {
+    //Central point and azimuth method
+
+    if (this.lat0 >= 0) {
+      fl = dl + Math.sqrt(dl * dl - 1);
+    }
+    else {
+      fl = dl - Math.sqrt(dl * dl - 1);
+    }
+    this.el = fl * Math.pow(t0, this.bl);
+    gl = 0.5 * (fl - 1 / fl);
+    this.gamma0 = Math.asin(Math.sin(this.alpha) / dl);
+    this.long0 = this.longc - Math.asin(gl * Math.tan(this.gamma0)) / this.bl;
+
+  }
+  else {
+    //2 points method
+    var t1 = tsfnz(this.e, this.lat1, Math.sin(this.lat1));
+    var t2 = tsfnz(this.e, this.lat2, Math.sin(this.lat2));
+    if (this.lat0 >= 0) {
+      this.el = (dl + Math.sqrt(dl * dl - 1)) * Math.pow(t0, this.bl);
+    }
+    else {
+      this.el = (dl - Math.sqrt(dl * dl - 1)) * Math.pow(t0, this.bl);
+    }
+    var hl = Math.pow(t1, this.bl);
+    var ll = Math.pow(t2, this.bl);
+    fl = this.el / hl;
+    gl = 0.5 * (fl - 1 / fl);
+    var jl = (this.el * this.el - ll * hl) / (this.el * this.el + ll * hl);
+    var pl = (ll - hl) / (ll + hl);
+    var dlon12 = adjust_lon(this.long1 - this.long2);
+    this.long0 = 0.5 * (this.long1 + this.long2) - Math.atan(jl * Math.tan(0.5 * this.bl * (dlon12)) / pl) / this.bl;
+    this.long0 = adjust_lon(this.long0);
+    var dlon10 = adjust_lon(this.long1 - this.long0);
+    this.gamma0 = Math.atan(Math.sin(this.bl * (dlon10)) / gl);
+    this.alpha = Math.asin(dl * Math.sin(this.gamma0));
+  }
+
+  if (this.no_off) {
+    this.uc = 0;
+  }
+  else {
+    if (this.lat0 >= 0) {
+      this.uc = this.al / this.bl * Math.atan2(Math.sqrt(dl * dl - 1), Math.cos(this.alpha));
+    }
+    else {
+      this.uc = -1 * this.al / this.bl * Math.atan2(Math.sqrt(dl * dl - 1), Math.cos(this.alpha));
+    }
+  }
+
+};
+
+
+/* Oblique Mercator forward equations--mapping lat,long to x,y
+    ----------------------------------------------------------*/
+exports.forward = function(p) {
+  var lon = p.x;
+  var lat = p.y;
+  var dlon = adjust_lon(lon - this.long0);
+  var us, vs;
+  var con;
+  if (Math.abs(Math.abs(lat) - HALF_PI) <= EPSLN) {
+    if (lat > 0) {
+      con = -1;
+    }
+    else {
+      con = 1;
+    }
+    vs = this.al / this.bl * Math.log(Math.tan(FORTPI + con * this.gamma0 * 0.5));
+    us = -1 * con * HALF_PI * this.al / this.bl;
+  }
+  else {
+    var t = tsfnz(this.e, lat, Math.sin(lat));
+    var ql = this.el / Math.pow(t, this.bl);
+    var sl = 0.5 * (ql - 1 / ql);
+    var tl = 0.5 * (ql + 1 / ql);
+    var vl = Math.sin(this.bl * (dlon));
+    var ul = (sl * Math.sin(this.gamma0) - vl * Math.cos(this.gamma0)) / tl;
+    if (Math.abs(Math.abs(ul) - 1) <= EPSLN) {
+      vs = Number.POSITIVE_INFINITY;
+    }
+    else {
+      vs = 0.5 * this.al * Math.log((1 - ul) / (1 + ul)) / this.bl;
+    }
+    if (Math.abs(Math.cos(this.bl * (dlon))) <= EPSLN) {
+      us = this.al * this.bl * (dlon);
+    }
+    else {
+      us = this.al * Math.atan2(sl * Math.cos(this.gamma0) + vl * Math.sin(this.gamma0), Math.cos(this.bl * dlon)) / this.bl;
+    }
+  }
+
+  if (this.no_rot) {
+    p.x = this.x0 + us;
+    p.y = this.y0 + vs;
+  }
+  else {
+
+    us -= this.uc;
+    p.x = this.x0 + vs * Math.cos(this.alpha) + us * Math.sin(this.alpha);
+    p.y = this.y0 + us * Math.cos(this.alpha) - vs * Math.sin(this.alpha);
+  }
+  return p;
+};
+
+exports.inverse = function(p) {
+  var us, vs;
+  if (this.no_rot) {
+    vs = p.y - this.y0;
+    us = p.x - this.x0;
+  }
+  else {
+    vs = (p.x - this.x0) * Math.cos(this.alpha) - (p.y - this.y0) * Math.sin(this.alpha);
+    us = (p.y - this.y0) * Math.cos(this.alpha) + (p.x - this.x0) * Math.sin(this.alpha);
+    us += this.uc;
+  }
+  var qp = Math.exp(-1 * this.bl * vs / this.al);
+  var sp = 0.5 * (qp - 1 / qp);
+  var tp = 0.5 * (qp + 1 / qp);
+  var vp = Math.sin(this.bl * us / this.al);
+  var up = (vp * Math.cos(this.gamma0) + sp * Math.sin(this.gamma0)) / tp;
+  var ts = Math.pow(this.el / Math.sqrt((1 + up) / (1 - up)), 1 / this.bl);
+  if (Math.abs(up - 1) < EPSLN) {
+    p.x = this.long0;
+    p.y = HALF_PI;
+  }
+  else if (Math.abs(up + 1) < EPSLN) {
+    p.x = this.long0;
+    p.y = -1 * HALF_PI;
+  }
+  else {
+    p.y = phi2z(this.e, ts);
+    p.x = adjust_lon(this.long0 - Math.atan2(sp * Math.cos(this.gamma0) - vp * Math.sin(this.gamma0), Math.cos(this.bl * us / this.al)) / this.bl);
+  }
+  return p;
+};
+
+exports.names = ["Hotine_Oblique_Mercator", "Hotine Oblique Mercator", "Hotine_Oblique_Mercator_Azimuth_Natural_Origin", "Hotine_Oblique_Mercator_Azimuth_Center", "omerc"];
+},{"../common/adjust_lon":5,"../common/phi2z":16,"../common/tsfnz":24}],56:[function(_dereq_,module,exports){
+var e0fn = _dereq_('../common/e0fn');
+var e1fn = _dereq_('../common/e1fn');
+var e2fn = _dereq_('../common/e2fn');
+var e3fn = _dereq_('../common/e3fn');
+var adjust_lon = _dereq_('../common/adjust_lon');
+var adjust_lat = _dereq_('../common/adjust_lat');
+var mlfn = _dereq_('../common/mlfn');
+var EPSLN = 1.0e-10;
+var gN = _dereq_('../common/gN');
+var MAX_ITER = 20;
+exports.init = function() {
+  /* Place parameters in static storage for common use
+      -------------------------------------------------*/
+  this.temp = this.b / this.a;
+  this.es = 1 - Math.pow(this.temp, 2); // devait etre dans tmerc.js mais n y est pas donc je commente sinon retour de valeurs nulles
+  this.e = Math.sqrt(this.es);
+  this.e0 = e0fn(this.es);
+  this.e1 = e1fn(this.es);
+  this.e2 = e2fn(this.es);
+  this.e3 = e3fn(this.es);
+  this.ml0 = this.a * mlfn(this.e0, this.e1, this.e2, this.e3, this.lat0); //si que des zeros le calcul ne se fait pas
+};
+
+
+/* Polyconic forward equations--mapping lat,long to x,y
+    ---------------------------------------------------*/
+exports.forward = function(p) {
+  var lon = p.x;
+  var lat = p.y;
+  var x, y, el;
+  var dlon = adjust_lon(lon - this.long0);
+  el = dlon * Math.sin(lat);
+  if (this.sphere) {
+    if (Math.abs(lat) <= EPSLN) {
+      x = this.a * dlon;
+      y = -1 * this.a * this.lat0;
+    }
+    else {
+      x = this.a * Math.sin(el) / Math.tan(lat);
+      y = this.a * (adjust_lat(lat - this.lat0) + (1 - Math.cos(el)) / Math.tan(lat));
+    }
+  }
+  else {
+    if (Math.abs(lat) <= EPSLN) {
+      x = this.a * dlon;
+      y = -1 * this.ml0;
+    }
+    else {
+      var nl = gN(this.a, this.e, Math.sin(lat)) / Math.tan(lat);
+      x = nl * Math.sin(el);
+      y = this.a * mlfn(this.e0, this.e1, this.e2, this.e3, lat) - this.ml0 + nl * (1 - Math.cos(el));
+    }
+
+  }
+  p.x = x + this.x0;
+  p.y = y + this.y0;
+  return p;
+};
+
+
+/* Inverse equations
+  -----------------*/
+exports.inverse = function(p) {
+  var lon, lat, x, y, i;
+  var al, bl;
+  var phi, dphi;
+  x = p.x - this.x0;
+  y = p.y - this.y0;
+
+  if (this.sphere) {
+    if (Math.abs(y + this.a * this.lat0) <= EPSLN) {
+      lon = adjust_lon(x / this.a + this.long0);
+      lat = 0;
+    }
+    else {
+      al = this.lat0 + y / this.a;
+      bl = x * x / this.a / this.a + al * al;
+      phi = al;
+      var tanphi;
+      for (i = MAX_ITER; i; --i) {
+        tanphi = Math.tan(phi);
+        dphi = -1 * (al * (phi * tanphi + 1) - phi - 0.5 * (phi * phi + bl) * tanphi) / ((phi - al) / tanphi - 1);
+        phi += dphi;
+        if (Math.abs(dphi) <= EPSLN) {
+          lat = phi;
+          break;
+        }
+      }
+      lon = adjust_lon(this.long0 + (Math.asin(x * Math.tan(phi) / this.a)) / Math.sin(lat));
+    }
+  }
+  else {
+    if (Math.abs(y + this.ml0) <= EPSLN) {
+      lat = 0;
+      lon = adjust_lon(this.long0 + x / this.a);
+    }
+    else {
+
+      al = (this.ml0 + y) / this.a;
+      bl = x * x / this.a / this.a + al * al;
+      phi = al;
+      var cl, mln, mlnp, ma;
+      var con;
+      for (i = MAX_ITER; i; --i) {
+        con = this.e * Math.sin(phi);
+        cl = Math.sqrt(1 - con * con) * Math.tan(phi);
+        mln = this.a * mlfn(this.e0, this.e1, this.e2, this.e3, phi);
+        mlnp = this.e0 - 2 * this.e1 * Math.cos(2 * phi) + 4 * this.e2 * Math.cos(4 * phi) - 6 * this.e3 * Math.cos(6 * phi);
+        ma = mln / this.a;
+        dphi = (al * (cl * ma + 1) - ma - 0.5 * cl * (ma * ma + bl)) / (this.es * Math.sin(2 * phi) * (ma * ma + bl - 2 * al * ma) / (4 * cl) + (al - ma) * (cl * mlnp - 2 / Math.sin(2 * phi)) - mlnp);
+        phi -= dphi;
+        if (Math.abs(dphi) <= EPSLN) {
+          lat = phi;
+          break;
+        }
+      }
+
+      //lat=phi4z(this.e,this.e0,this.e1,this.e2,this.e3,al,bl,0,0);
+      cl = Math.sqrt(1 - this.es * Math.pow(Math.sin(lat), 2)) * Math.tan(lat);
+      lon = adjust_lon(this.long0 + Math.asin(x * cl / this.a) / Math.sin(lat));
+    }
+  }
+
+  p.x = lon;
+  p.y = lat;
+  return p;
+};
+exports.names = ["Polyconic", "poly"];
+},{"../common/adjust_lat":4,"../common/adjust_lon":5,"../common/e0fn":7,"../common/e1fn":8,"../common/e2fn":9,"../common/e3fn":10,"../common/gN":11,"../common/mlfn":14}],57:[function(_dereq_,module,exports){
+var adjust_lon = _dereq_('../common/adjust_lon');
+var adjust_lat = _dereq_('../common/adjust_lat');
+var pj_enfn = _dereq_('../common/pj_enfn');
+var MAX_ITER = 20;
+var pj_mlfn = _dereq_('../common/pj_mlfn');
+var pj_inv_mlfn = _dereq_('../common/pj_inv_mlfn');
+var HALF_PI = Math.PI/2;
+var EPSLN = 1.0e-10;
+var asinz = _dereq_('../common/asinz');
+exports.init = function() {
+  /* Place parameters in static storage for common use
+    -------------------------------------------------*/
+
+
+  if (!this.sphere) {
+    this.en = pj_enfn(this.es);
+  }
+  else {
+    this.n = 1;
+    this.m = 0;
+    this.es = 0;
+    this.C_y = Math.sqrt((this.m + 1) / this.n);
+    this.C_x = this.C_y / (this.m + 1);
+  }
+
+};
+
+/* Sinusoidal forward equations--mapping lat,long to x,y
+  -----------------------------------------------------*/
+exports.forward = function(p) {
+  var x, y;
+  var lon = p.x;
+  var lat = p.y;
+  /* Forward equations
+    -----------------*/
+  lon = adjust_lon(lon - this.long0);
+
+  if (this.sphere) {
+    if (!this.m) {
+      lat = this.n !== 1 ? Math.asin(this.n * Math.sin(lat)) : lat;
+    }
+    else {
+      var k = this.n * Math.sin(lat);
+      for (var i = MAX_ITER; i; --i) {
+        var V = (this.m * lat + Math.sin(lat) - k) / (this.m + Math.cos(lat));
+        lat -= V;
+        if (Math.abs(V) < EPSLN) {
+          break;
+        }
+      }
+    }
+    x = this.a * this.C_x * lon * (this.m + Math.cos(lat));
+    y = this.a * this.C_y * lat;
+
+  }
+  else {
+
+    var s = Math.sin(lat);
+    var c = Math.cos(lat);
+    y = this.a * pj_mlfn(lat, s, c, this.en);
+    x = this.a * lon * c / Math.sqrt(1 - this.es * s * s);
+  }
+
+  p.x = x;
+  p.y = y;
+  return p;
+};
+
+exports.inverse = function(p) {
+  var lat, temp, lon, s;
+
+  p.x -= this.x0;
+  lon = p.x / this.a;
+  p.y -= this.y0;
+  lat = p.y / this.a;
+
+  if (this.sphere) {
+    lat /= this.C_y;
+    lon = lon / (this.C_x * (this.m + Math.cos(lat)));
+    if (this.m) {
+      lat = asinz((this.m * lat + Math.sin(lat)) / this.n);
+    }
+    else if (this.n !== 1) {
+      lat = asinz(Math.sin(lat) / this.n);
+    }
+    lon = adjust_lon(lon + this.long0);
+    lat = adjust_lat(lat);
+  }
+  else {
+    lat = pj_inv_mlfn(p.y / this.a, this.es, this.en);
+    s = Math.abs(lat);
+    if (s < HALF_PI) {
+      s = Math.sin(lat);
+      temp = this.long0 + p.x * Math.sqrt(1 - this.es * s * s) / (this.a * Math.cos(lat));
+      //temp = this.long0 + p.x / (this.a * Math.cos(lat));
+      lon = adjust_lon(temp);
+    }
+    else if ((s - EPSLN) < HALF_PI) {
+      lon = this.long0;
+    }
+  }
+  p.x = lon;
+  p.y = lat;
+  return p;
+};
+exports.names = ["Sinusoidal", "sinu"];
+},{"../common/adjust_lat":4,"../common/adjust_lon":5,"../common/asinz":6,"../common/pj_enfn":17,"../common/pj_inv_mlfn":18,"../common/pj_mlfn":19}],58:[function(_dereq_,module,exports){
+/*
+  references:
+    Formules et constantes pour le Calcul pour la
+    projection cylindrique conforme à axe oblique et pour la transformation entre
+    des systèmes de référence.
+    http://www.swisstopo.admin.ch/internet/swisstopo/fr/home/topics/survey/sys/refsys/switzerland.parsysrelated1.31216.downloadList.77004.DownloadFile.tmp/swissprojectionfr.pdf
+  */
+exports.init = function() {
+  var phy0 = this.lat0;
+  this.lambda0 = this.long0;
+  var sinPhy0 = Math.sin(phy0);
+  var semiMajorAxis = this.a;
+  var invF = this.rf;
+  var flattening = 1 / invF;
+  var e2 = 2 * flattening - Math.pow(flattening, 2);
+  var e = this.e = Math.sqrt(e2);
+  this.R = this.k0 * semiMajorAxis * Math.sqrt(1 - e2) / (1 - e2 * Math.pow(sinPhy0, 2));
+  this.alpha = Math.sqrt(1 + e2 / (1 - e2) * Math.pow(Math.cos(phy0), 4));
+  this.b0 = Math.asin(sinPhy0 / this.alpha);
+  var k1 = Math.log(Math.tan(Math.PI / 4 + this.b0 / 2));
+  var k2 = Math.log(Math.tan(Math.PI / 4 + phy0 / 2));
+  var k3 = Math.log((1 + e * sinPhy0) / (1 - e * sinPhy0));
+  this.K = k1 - this.alpha * k2 + this.alpha * e / 2 * k3;
+};
+
+
+exports.forward = function(p) {
+  var Sa1 = Math.log(Math.tan(Math.PI / 4 - p.y / 2));
+  var Sa2 = this.e / 2 * Math.log((1 + this.e * Math.sin(p.y)) / (1 - this.e * Math.sin(p.y)));
+  var S = -this.alpha * (Sa1 + Sa2) + this.K;
+
+  // spheric latitude
+  var b = 2 * (Math.atan(Math.exp(S)) - Math.PI / 4);
+
+  // spheric longitude
+  var I = this.alpha * (p.x - this.lambda0);
+
+  // psoeudo equatorial rotation
+  var rotI = Math.atan(Math.sin(I) / (Math.sin(this.b0) * Math.tan(b) + Math.cos(this.b0) * Math.cos(I)));
+
+  var rotB = Math.asin(Math.cos(this.b0) * Math.sin(b) - Math.sin(this.b0) * Math.cos(b) * Math.cos(I));
+
+  p.y = this.R / 2 * Math.log((1 + Math.sin(rotB)) / (1 - Math.sin(rotB))) + this.y0;
+  p.x = this.R * rotI + this.x0;
+  return p;
+};
+
+exports.inverse = function(p) {
+  var Y = p.x - this.x0;
+  var X = p.y - this.y0;
+
+  var rotI = Y / this.R;
+  var rotB = 2 * (Math.atan(Math.exp(X / this.R)) - Math.PI / 4);
+
+  var b = Math.asin(Math.cos(this.b0) * Math.sin(rotB) + Math.sin(this.b0) * Math.cos(rotB) * Math.cos(rotI));
+  var I = Math.atan(Math.sin(rotI) / (Math.cos(this.b0) * Math.cos(rotI) - Math.sin(this.b0) * Math.tan(rotB)));
+
+  var lambda = this.lambda0 + I / this.alpha;
+
+  var S = 0;
+  var phy = b;
+  var prevPhy = -1000;
+  var iteration = 0;
+  while (Math.abs(phy - prevPhy) > 0.0000001) {
+    if (++iteration > 20) {
+      //...reportError("omercFwdInfinity");
+      return;
+    }
+    //S = Math.log(Math.tan(Math.PI / 4 + phy / 2));
+    S = 1 / this.alpha * (Math.log(Math.tan(Math.PI / 4 + b / 2)) - this.K) + this.e * Math.log(Math.tan(Math.PI / 4 + Math.asin(this.e * Math.sin(phy)) / 2));
+    prevPhy = phy;
+    phy = 2 * Math.atan(Math.exp(S)) - Math.PI / 2;
+  }
+
+  p.x = lambda;
+  p.y = phy;
+  return p;
+};
+
+exports.names = ["somerc"];
+
+},{}],59:[function(_dereq_,module,exports){
+var HALF_PI = Math.PI/2;
+var EPSLN = 1.0e-10;
+var sign = _dereq_('../common/sign');
+var msfnz = _dereq_('../common/msfnz');
+var tsfnz = _dereq_('../common/tsfnz');
+var phi2z = _dereq_('../common/phi2z');
+var adjust_lon = _dereq_('../common/adjust_lon');
+exports.ssfn_ = function(phit, sinphi, eccen) {
+  sinphi *= eccen;
+  return (Math.tan(0.5 * (HALF_PI + phit)) * Math.pow((1 - sinphi) / (1 + sinphi), 0.5 * eccen));
+};
+
+exports.init = function() {
+  this.coslat0 = Math.cos(this.lat0);
+  this.sinlat0 = Math.sin(this.lat0);
+  if (this.sphere) {
+    if (this.k0 === 1 && !isNaN(this.lat_ts) && Math.abs(this.coslat0) <= EPSLN) {
+      this.k0 = 0.5 * (1 + sign(this.lat0) * Math.sin(this.lat_ts));
+    }
+  }
+  else {
+    if (Math.abs(this.coslat0) <= EPSLN) {
+      if (this.lat0 > 0) {
+        //North pole
+        //trace('stere:north pole');
+        this.con = 1;
+      }
+      else {
+        //South pole
+        //trace('stere:south pole');
+        this.con = -1;
+      }
+    }
+    this.cons = Math.sqrt(Math.pow(1 + this.e, 1 + this.e) * Math.pow(1 - this.e, 1 - this.e));
+    if (this.k0 === 1 && !isNaN(this.lat_ts) && Math.abs(this.coslat0) <= EPSLN) {
+      this.k0 = 0.5 * this.cons * msfnz(this.e, Math.sin(this.lat_ts), Math.cos(this.lat_ts)) / tsfnz(this.e, this.con * this.lat_ts, this.con * Math.sin(this.lat_ts));
+    }
+    this.ms1 = msfnz(this.e, this.sinlat0, this.coslat0);
+    this.X0 = 2 * Math.atan(this.ssfn_(this.lat0, this.sinlat0, this.e)) - HALF_PI;
+    this.cosX0 = Math.cos(this.X0);
+    this.sinX0 = Math.sin(this.X0);
+  }
+};
+
+// Stereographic forward equations--mapping lat,long to x,y
+exports.forward = function(p) {
+  var lon = p.x;
+  var lat = p.y;
+  var sinlat = Math.sin(lat);
+  var coslat = Math.cos(lat);
+  var A, X, sinX, cosX, ts, rh;
+  var dlon = adjust_lon(lon - this.long0);
+
+  if (Math.abs(Math.abs(lon - this.long0) - Math.PI) <= EPSLN && Math.abs(lat + this.lat0) <= EPSLN) {
+    //case of the origine point
+    //trace('stere:this is the origin point');
+    p.x = NaN;
+    p.y = NaN;
+    return p;
+  }
+  if (this.sphere) {
+    //trace('stere:sphere case');
+    A = 2 * this.k0 / (1 + this.sinlat0 * sinlat + this.coslat0 * coslat * Math.cos(dlon));
+    p.x = this.a * A * coslat * Math.sin(dlon) + this.x0;
+    p.y = this.a * A * (this.coslat0 * sinlat - this.sinlat0 * coslat * Math.cos(dlon)) + this.y0;
+    return p;
+  }
+  else {
+    X = 2 * Math.atan(this.ssfn_(lat, sinlat, this.e)) - HALF_PI;
+    cosX = Math.cos(X);
+    sinX = Math.sin(X);
+    if (Math.abs(this.coslat0) <= EPSLN) {
+      ts = tsfnz(this.e, lat * this.con, this.con * sinlat);
+      rh = 2 * this.a * this.k0 * ts / this.cons;
+      p.x = this.x0 + rh * Math.sin(lon - this.long0);
+      p.y = this.y0 - this.con * rh * Math.cos(lon - this.long0);
+      //trace(p.toString());
+      return p;
+    }
+    else if (Math.abs(this.sinlat0) < EPSLN) {
+      //Eq
+      //trace('stere:equateur');
+      A = 2 * this.a * this.k0 / (1 + cosX * Math.cos(dlon));
+      p.y = A * sinX;
+    }
+    else {
+      //other case
+      //trace('stere:normal case');
+      A = 2 * this.a * this.k0 * this.ms1 / (this.cosX0 * (1 + this.sinX0 * sinX + this.cosX0 * cosX * Math.cos(dlon)));
+      p.y = A * (this.cosX0 * sinX - this.sinX0 * cosX * Math.cos(dlon)) + this.y0;
+    }
+    p.x = A * cosX * Math.sin(dlon) + this.x0;
+  }
+  //trace(p.toString());
+  return p;
+};
+
+
+//* Stereographic inverse equations--mapping x,y to lat/long
+exports.inverse = function(p) {
+  p.x -= this.x0;
+  p.y -= this.y0;
+  var lon, lat, ts, ce, Chi;
+  var rh = Math.sqrt(p.x * p.x + p.y * p.y);
+  if (this.sphere) {
+    var c = 2 * Math.atan(rh / (0.5 * this.a * this.k0));
+    lon = this.long0;
+    lat = this.lat0;
+    if (rh <= EPSLN) {
+      p.x = lon;
+      p.y = lat;
+      return p;
+    }
+    lat = Math.asin(Math.cos(c) * this.sinlat0 + p.y * Math.sin(c) * this.coslat0 / rh);
+    if (Math.abs(this.coslat0) < EPSLN) {
+      if (this.lat0 > 0) {
+        lon = adjust_lon(this.long0 + Math.atan2(p.x, - 1 * p.y));
+      }
+      else {
+        lon = adjust_lon(this.long0 + Math.atan2(p.x, p.y));
+      }
+    }
+    else {
+      lon = adjust_lon(this.long0 + Math.atan2(p.x * Math.sin(c), rh * this.coslat0 * Math.cos(c) - p.y * this.sinlat0 * Math.sin(c)));
+    }
+    p.x = lon;
+    p.y = lat;
+    return p;
+  }
+  else {
+    if (Math.abs(this.coslat0) <= EPSLN) {
+      if (rh <= EPSLN) {
+        lat = this.lat0;
+        lon = this.long0;
+        p.x = lon;
+        p.y = lat;
+        //trace(p.toString());
+        return p;
+      }
+      p.x *= this.con;
+      p.y *= this.con;
+      ts = rh * this.cons / (2 * this.a * this.k0);
+      lat = this.con * phi2z(this.e, ts);
+      lon = this.con * adjust_lon(this.con * this.long0 + Math.atan2(p.x, - 1 * p.y));
+    }
+    else {
+      ce = 2 * Math.atan(rh * this.cosX0 / (2 * this.a * this.k0 * this.ms1));
+      lon = this.long0;
+      if (rh <= EPSLN) {
+        Chi = this.X0;
+      }
+      else {
+        Chi = Math.asin(Math.cos(ce) * this.sinX0 + p.y * Math.sin(ce) * this.cosX0 / rh);
+        lon = adjust_lon(this.long0 + Math.atan2(p.x * Math.sin(ce), rh * this.cosX0 * Math.cos(ce) - p.y * this.sinX0 * Math.sin(ce)));
+      }
+      lat = -1 * phi2z(this.e, Math.tan(0.5 * (HALF_PI + Chi)));
+    }
+  }
+  p.x = lon;
+  p.y = lat;
+
+  //trace(p.toString());
+  return p;
+
+};
+exports.names = ["stere"];
+},{"../common/adjust_lon":5,"../common/msfnz":15,"../common/phi2z":16,"../common/sign":21,"../common/tsfnz":24}],60:[function(_dereq_,module,exports){
+var gauss = _dereq_('./gauss');
+var adjust_lon = _dereq_('../common/adjust_lon');
+exports.init = function() {
+  gauss.init.apply(this);
+  if (!this.rc) {
+    return;
+  }
+  this.sinc0 = Math.sin(this.phic0);
+  this.cosc0 = Math.cos(this.phic0);
+  this.R2 = 2 * this.rc;
+  if (!this.title) {
+    this.title = "Oblique Stereographic Alternative";
+  }
+};
+
+exports.forward = function(p) {
+  var sinc, cosc, cosl, k;
+  p.x = adjust_lon(p.x - this.long0);
+  gauss.forward.apply(this, [p]);
+  sinc = Math.sin(p.y);
+  cosc = Math.cos(p.y);
+  cosl = Math.cos(p.x);
+  k = this.k0 * this.R2 / (1 + this.sinc0 * sinc + this.cosc0 * cosc * cosl);
+  p.x = k * cosc * Math.sin(p.x);
+  p.y = k * (this.cosc0 * sinc - this.sinc0 * cosc * cosl);
+  p.x = this.a * p.x + this.x0;
+  p.y = this.a * p.y + this.y0;
+  return p;
+};
+
+exports.inverse = function(p) {
+  var sinc, cosc, lon, lat, rho;
+  p.x = (p.x - this.x0) / this.a;
+  p.y = (p.y - this.y0) / this.a;
+
+  p.x /= this.k0;
+  p.y /= this.k0;
+  if ((rho = Math.sqrt(p.x * p.x + p.y * p.y))) {
+    var c = 2 * Math.atan2(rho, this.R2);
+    sinc = Math.sin(c);
+    cosc = Math.cos(c);
+    lat = Math.asin(cosc * this.sinc0 + p.y * sinc * this.cosc0 / rho);
+    lon = Math.atan2(p.x * sinc, rho * this.cosc0 * cosc - p.y * this.sinc0 * sinc);
+  }
+  else {
+    lat = this.phic0;
+    lon = 0;
+  }
+
+  p.x = lon;
+  p.y = lat;
+  gauss.inverse.apply(this, [p]);
+  p.x = adjust_lon(p.x + this.long0);
+  return p;
+};
+
+exports.names = ["Stereographic_North_Pole", "Oblique_Stereographic", "Polar_Stereographic", "sterea","Oblique Stereographic Alternative"];
+
+},{"../common/adjust_lon":5,"./gauss":45}],61:[function(_dereq_,module,exports){
+var e0fn = _dereq_('../common/e0fn');
+var e1fn = _dereq_('../common/e1fn');
+var e2fn = _dereq_('../common/e2fn');
+var e3fn = _dereq_('../common/e3fn');
+var mlfn = _dereq_('../common/mlfn');
+var adjust_lon = _dereq_('../common/adjust_lon');
+var HALF_PI = Math.PI/2;
+var EPSLN = 1.0e-10;
+var sign = _dereq_('../common/sign');
+var asinz = _dereq_('../common/asinz');
+
+exports.init = function() {
+  this.e0 = e0fn(this.es);
+  this.e1 = e1fn(this.es);
+  this.e2 = e2fn(this.es);
+  this.e3 = e3fn(this.es);
+  this.ml0 = this.a * mlfn(this.e0, this.e1, this.e2, this.e3, this.lat0);
+};
+
+/**
+    Transverse Mercator Forward  - long/lat to x/y
+    long/lat in radians
+  */
+exports.forward = function(p) {
+  var lon = p.x;
+  var lat = p.y;
+
+  var delta_lon = adjust_lon(lon - this.long0);
+  var con;
+  var x, y;
+  var sin_phi = Math.sin(lat);
+  var cos_phi = Math.cos(lat);
+
+  if (this.sphere) {
+    var b = cos_phi * Math.sin(delta_lon);
+    if ((Math.abs(Math.abs(b) - 1)) < 0.0000000001) {
+      return (93);
+    }
+    else {
+      x = 0.5 * this.a * this.k0 * Math.log((1 + b) / (1 - b));
+      con = Math.acos(cos_phi * Math.cos(delta_lon) / Math.sqrt(1 - b * b));
+      if (lat < 0) {
+        con = -con;
+      }
+      y = this.a * this.k0 * (con - this.lat0);
+    }
+  }
+  else {
+    var al = cos_phi * delta_lon;
+    var als = Math.pow(al, 2);
+    var c = this.ep2 * Math.pow(cos_phi, 2);
+    var tq = Math.tan(lat);
+    var t = Math.pow(tq, 2);
+    con = 1 - this.es * Math.pow(sin_phi, 2);
+    var n = this.a / Math.sqrt(con);
+    var ml = this.a * mlfn(this.e0, this.e1, this.e2, this.e3, lat);
+
+    x = this.k0 * n * al * (1 + als / 6 * (1 - t + c + als / 20 * (5 - 18 * t + Math.pow(t, 2) + 72 * c - 58 * this.ep2))) + this.x0;
+    y = this.k0 * (ml - this.ml0 + n * tq * (als * (0.5 + als / 24 * (5 - t + 9 * c + 4 * Math.pow(c, 2) + als / 30 * (61 - 58 * t + Math.pow(t, 2) + 600 * c - 330 * this.ep2))))) + this.y0;
+
+  }
+  p.x = x;
+  p.y = y;
+  return p;
+};
+
+/**
+    Transverse Mercator Inverse  -  x/y to long/lat
+  */
+exports.inverse = function(p) {
+  var con, phi;
+  var delta_phi;
+  var i;
+  var max_iter = 6;
+  var lat, lon;
+
+  if (this.sphere) {
+    var f = Math.exp(p.x / (this.a * this.k0));
+    var g = 0.5 * (f - 1 / f);
+    var temp = this.lat0 + p.y / (this.a * this.k0);
+    var h = Math.cos(temp);
+    con = Math.sqrt((1 - h * h) / (1 + g * g));
+    lat = asinz(con);
+    if (temp < 0) {
+      lat = -lat;
+    }
+    if ((g === 0) && (h === 0)) {
+      lon = this.long0;
+    }
+    else {
+      lon = adjust_lon(Math.atan2(g, h) + this.long0);
+    }
+  }
+  else { // ellipsoidal form
+    var x = p.x - this.x0;
+    var y = p.y - this.y0;
+
+    con = (this.ml0 + y / this.k0) / this.a;
+    phi = con;
+    for (i = 0; true; i++) {
+      delta_phi = ((con + this.e1 * Math.sin(2 * phi) - this.e2 * Math.sin(4 * phi) + this.e3 * Math.sin(6 * phi)) / this.e0) - phi;
+      phi += delta_phi;
+      if (Math.abs(delta_phi) <= EPSLN) {
+        break;
+      }
+      if (i >= max_iter) {
+        return (95);
+      }
+    } // for()
+    if (Math.abs(phi) < HALF_PI) {
+      var sin_phi = Math.sin(phi);
+      var cos_phi = Math.cos(phi);
+      var tan_phi = Math.tan(phi);
+      var c = this.ep2 * Math.pow(cos_phi, 2);
+      var cs = Math.pow(c, 2);
+      var t = Math.pow(tan_phi, 2);
+      var ts = Math.pow(t, 2);
+      con = 1 - this.es * Math.pow(sin_phi, 2);
+      var n = this.a / Math.sqrt(con);
+      var r = n * (1 - this.es) / con;
+      var d = x / (n * this.k0);
+      var ds = Math.pow(d, 2);
+      lat = phi - (n * tan_phi * ds / r) * (0.5 - ds / 24 * (5 + 3 * t + 10 * c - 4 * cs - 9 * this.ep2 - ds / 30 * (61 + 90 * t + 298 * c + 45 * ts - 252 * this.ep2 - 3 * cs)));
+      lon = adjust_lon(this.long0 + (d * (1 - ds / 6 * (1 + 2 * t + c - ds / 20 * (5 - 2 * c + 28 * t - 3 * cs + 8 * this.ep2 + 24 * ts))) / cos_phi));
+    }
+    else {
+      lat = HALF_PI * sign(y);
+      lon = this.long0;
+    }
+  }
+  p.x = lon;
+  p.y = lat;
+  return p;
+};
+exports.names = ["Transverse_Mercator", "Transverse Mercator", "tmerc"];
+
+},{"../common/adjust_lon":5,"../common/asinz":6,"../common/e0fn":7,"../common/e1fn":8,"../common/e2fn":9,"../common/e3fn":10,"../common/mlfn":14,"../common/sign":21}],62:[function(_dereq_,module,exports){
+var D2R = 0.01745329251994329577;
+var tmerc = _dereq_('./tmerc');
+exports.dependsOn = 'tmerc';
+exports.init = function() {
+  if (!this.zone) {
+    return;
+  }
+  this.lat0 = 0;
+  this.long0 = ((6 * Math.abs(this.zone)) - 183) * D2R;
+  this.x0 = 500000;
+  this.y0 = this.utmSouth ? 10000000 : 0;
+  this.k0 = 0.9996;
+
+  tmerc.init.apply(this);
+  this.forward = tmerc.forward;
+  this.inverse = tmerc.inverse;
+};
+exports.names = ["Universal Transverse Mercator System", "utm"];
+
+},{"./tmerc":61}],63:[function(_dereq_,module,exports){
+var adjust_lon = _dereq_('../common/adjust_lon');
+var HALF_PI = Math.PI/2;
+var EPSLN = 1.0e-10;
+var asinz = _dereq_('../common/asinz');
+/* Initialize the Van Der Grinten projection
+  ----------------------------------------*/
+exports.init = function() {
+  //this.R = 6370997; //Radius of earth
+  this.R = this.a;
+};
+
+exports.forward = function(p) {
+
+  var lon = p.x;
+  var lat = p.y;
+
+  /* Forward equations
+    -----------------*/
+  var dlon = adjust_lon(lon - this.long0);
+  var x, y;
+
+  if (Math.abs(lat) <= EPSLN) {
+    x = this.x0 + this.R * dlon;
+    y = this.y0;
+  }
+  var theta = asinz(2 * Math.abs(lat / Math.PI));
+  if ((Math.abs(dlon) <= EPSLN) || (Math.abs(Math.abs(lat) - HALF_PI) <= EPSLN)) {
+    x = this.x0;
+    if (lat >= 0) {
+      y = this.y0 + Math.PI * this.R * Math.tan(0.5 * theta);
+    }
+    else {
+      y = this.y0 + Math.PI * this.R * -Math.tan(0.5 * theta);
+    }
+    //  return(OK);
+  }
+  var al = 0.5 * Math.abs((Math.PI / dlon) - (dlon / Math.PI));
+  var asq = al * al;
+  var sinth = Math.sin(theta);
+  var costh = Math.cos(theta);
+
+  var g = costh / (sinth + costh - 1);
+  var gsq = g * g;
+  var m = g * (2 / sinth - 1);
+  var msq = m * m;
+  var con = Math.PI * this.R * (al * (g - msq) + Math.sqrt(asq * (g - msq) * (g - msq) - (msq + asq) * (gsq - msq))) / (msq + asq);
+  if (dlon < 0) {
+    con = -con;
+  }
+  x = this.x0 + con;
+  //con = Math.abs(con / (Math.PI * this.R));
+  var q = asq + g;
+  con = Math.PI * this.R * (m * q - al * Math.sqrt((msq + asq) * (asq + 1) - q * q)) / (msq + asq);
+  if (lat >= 0) {
+    //y = this.y0 + Math.PI * this.R * Math.sqrt(1 - con * con - 2 * al * con);
+    y = this.y0 + con;
+  }
+  else {
+    //y = this.y0 - Math.PI * this.R * Math.sqrt(1 - con * con - 2 * al * con);
+    y = this.y0 - con;
+  }
+  p.x = x;
+  p.y = y;
+  return p;
+};
+
+/* Van Der Grinten inverse equations--mapping x,y to lat/long
+  ---------------------------------------------------------*/
+exports.inverse = function(p) {
+  var lon, lat;
+  var xx, yy, xys, c1, c2, c3;
+  var a1;
+  var m1;
+  var con;
+  var th1;
+  var d;
+
+  /* inverse equations
+    -----------------*/
+  p.x -= this.x0;
+  p.y -= this.y0;
+  con = Math.PI * this.R;
+  xx = p.x / con;
+  yy = p.y / con;
+  xys = xx * xx + yy * yy;
+  c1 = -Math.abs(yy) * (1 + xys);
+  c2 = c1 - 2 * yy * yy + xx * xx;
+  c3 = -2 * c1 + 1 + 2 * yy * yy + xys * xys;
+  d = yy * yy / c3 + (2 * c2 * c2 * c2 / c3 / c3 / c3 - 9 * c1 * c2 / c3 / c3) / 27;
+  a1 = (c1 - c2 * c2 / 3 / c3) / c3;
+  m1 = 2 * Math.sqrt(-a1 / 3);
+  con = ((3 * d) / a1) / m1;
+  if (Math.abs(con) > 1) {
+    if (con >= 0) {
+      con = 1;
+    }
+    else {
+      con = -1;
+    }
+  }
+  th1 = Math.acos(con) / 3;
+  if (p.y >= 0) {
+    lat = (-m1 * Math.cos(th1 + Math.PI / 3) - c2 / 3 / c3) * Math.PI;
+  }
+  else {
+    lat = -(-m1 * Math.cos(th1 + Math.PI / 3) - c2 / 3 / c3) * Math.PI;
+  }
+
+  if (Math.abs(xx) < EPSLN) {
+    lon = this.long0;
+  }
+  else {
+    lon = adjust_lon(this.long0 + Math.PI * (xys - 1 + Math.sqrt(1 + 2 * (xx * xx - yy * yy) + xys * xys)) / 2 / xx);
+  }
+
+  p.x = lon;
+  p.y = lat;
+  return p;
+};
+exports.names = ["Van_der_Grinten_I", "VanDerGrinten", "vandg"];
+},{"../common/adjust_lon":5,"../common/asinz":6}],64:[function(_dereq_,module,exports){
+var D2R = 0.01745329251994329577;
+var R2D = 57.29577951308232088;
+var PJD_3PARAM = 1;
+var PJD_7PARAM = 2;
+var datum_transform = _dereq_('./datum_transform');
+var adjust_axis = _dereq_('./adjust_axis');
+var proj = _dereq_('./Proj');
+var toPoint = _dereq_('./common/toPoint');
+module.exports = function transform(source, dest, point) {
+  var wgs84;
+  if (Array.isArray(point)) {
+    point = toPoint(point);
+  }
+  function checkNotWGS(source, dest) {
+    return ((source.datum.datum_type === PJD_3PARAM || source.datum.datum_type === PJD_7PARAM) && dest.datumCode !== "WGS84");
+  }
+
+  // Workaround for datum shifts towgs84, if either source or destination projection is not wgs84
+  if (source.datum && dest.datum && (checkNotWGS(source, dest) || checkNotWGS(dest, source))) {
+    wgs84 = new proj('WGS84');
+    transform(source, wgs84, point);
+    source = wgs84;
+  }
+  // DGR, 2010/11/12
+  if (source.axis !== "enu") {
+    adjust_axis(source, false, point);
+  }
+  // Transform source points to long/lat, if they aren't already.
+  if (source.projName === "longlat") {
+    point.x *= D2R; // convert degrees to radians
+    point.y *= D2R;
+  }
+  else {
+    if (source.to_meter) {
+      point.x *= source.to_meter;
+      point.y *= source.to_meter;
+    }
+    source.inverse(point); // Convert Cartesian to longlat
+  }
+  // Adjust for the prime meridian if necessary
+  if (source.from_greenwich) {
+    point.x += source.from_greenwich;
+  }
+
+  // Convert datums if needed, and if possible.
+  point = datum_transform(source.datum, dest.datum, point);
+
+  // Adjust for the prime meridian if necessary
+  if (dest.from_greenwich) {
+    point.x -= dest.from_greenwich;
+  }
+
+  if (dest.projName === "longlat") {
+    // convert radians to decimal degrees
+    point.x *= R2D;
+    point.y *= R2D;
+  }
+  else { // else project
+    dest.forward(point);
+    if (dest.to_meter) {
+      point.x /= dest.to_meter;
+      point.y /= dest.to_meter;
+    }
+  }
+
+  // DGR, 2010/11/12
+  if (dest.axis !== "enu") {
+    adjust_axis(dest, true, point);
+  }
+
+  return point;
+};
+},{"./Proj":2,"./adjust_axis":3,"./common/toPoint":23,"./datum_transform":30}],65:[function(_dereq_,module,exports){
+var D2R = 0.01745329251994329577;
+var extend = _dereq_('./extend');
+
+function mapit(obj, key, v) {
+  obj[key] = v.map(function(aa) {
+    var o = {};
+    sExpr(aa, o);
+    return o;
+  }).reduce(function(a, b) {
+    return extend(a, b);
+  }, {});
+}
+
+function sExpr(v, obj) {
+  var key;
+  if (!Array.isArray(v)) {
+    obj[v] = true;
+    return;
+  }
+  else {
+    key = v.shift();
+    if (key === 'PARAMETER') {
+      key = v.shift();
+    }
+    if (v.length === 1) {
+      if (Array.isArray(v[0])) {
+        obj[key] = {};
+        sExpr(v[0], obj[key]);
+      }
+      else {
+        obj[key] = v[0];
+      }
+    }
+    else if (!v.length) {
+      obj[key] = true;
+    }
+    else if (key === 'TOWGS84') {
+      obj[key] = v;
+    }
+    else {
+      obj[key] = {};
+      if (['UNIT', 'PRIMEM', 'VERT_DATUM'].indexOf(key) > -1) {
+        obj[key] = {
+          name: v[0].toLowerCase(),
+          convert: v[1]
+        };
+        if (v.length === 3) {
+          obj[key].auth = v[2];
+        }
+      }
+      else if (key === 'SPHEROID') {
+        obj[key] = {
+          name: v[0],
+          a: v[1],
+          rf: v[2]
+        };
+        if (v.length === 4) {
+          obj[key].auth = v[3];
+        }
+      }
+      else if (['GEOGCS', 'GEOCCS', 'DATUM', 'VERT_CS', 'COMPD_CS', 'LOCAL_CS', 'FITTED_CS', 'LOCAL_DATUM'].indexOf(key) > -1) {
+        v[0] = ['name', v[0]];
+        mapit(obj, key, v);
+      }
+      else if (v.every(function(aa) {
+        return Array.isArray(aa);
+      })) {
+        mapit(obj, key, v);
+      }
+      else {
+        sExpr(v, obj[key]);
+      }
+    }
+  }
+}
+
+function rename(obj, params) {
+  var outName = params[0];
+  var inName = params[1];
+  if (!(outName in obj) && (inName in obj)) {
+    obj[outName] = obj[inName];
+    if (params.length === 3) {
+      obj[outName] = params[2](obj[outName]);
+    }
+  }
+}
+
+function d2r(input) {
+  return input * D2R;
+}
+
+function cleanWKT(wkt) {
+  if (wkt.type === 'GEOGCS') {
+    wkt.projName = 'longlat';
+  }
+  else if (wkt.type === 'LOCAL_CS') {
+    wkt.projName = 'identity';
+    wkt.local = true;
+  }
+  else {
+    if (typeof wkt.PROJECTION === "object") {
+      wkt.projName = Object.keys(wkt.PROJECTION)[0];
+    }
+    else {
+      wkt.projName = wkt.PROJECTION;
+    }
+  }
+  if (wkt.UNIT) {
+    wkt.units = wkt.UNIT.name.toLowerCase();
+    if (wkt.units === 'metre') {
+      wkt.units = 'meter';
+    }
+    if (wkt.UNIT.convert) {
+      wkt.to_meter = parseFloat(wkt.UNIT.convert, 10);
+    }
+  }
+
+  if (wkt.GEOGCS) {
+    //if(wkt.GEOGCS.PRIMEM&&wkt.GEOGCS.PRIMEM.convert){
+    //  wkt.from_greenwich=wkt.GEOGCS.PRIMEM.convert*D2R;
+    //}
+    if (wkt.GEOGCS.DATUM) {
+      wkt.datumCode = wkt.GEOGCS.DATUM.name.toLowerCase();
+    }
+    else {
+      wkt.datumCode = wkt.GEOGCS.name.toLowerCase();
+    }
+    if (wkt.datumCode.slice(0, 2) === 'd_') {
+      wkt.datumCode = wkt.datumCode.slice(2);
+    }
+    if (wkt.datumCode === 'new_zealand_geodetic_datum_1949' || wkt.datumCode === 'new_zealand_1949') {
+      wkt.datumCode = 'nzgd49';
+    }
+    if (wkt.datumCode === "wgs_1984") {
+      if (wkt.PROJECTION === 'Mercator_Auxiliary_Sphere') {
+        wkt.sphere = true;
+      }
+      wkt.datumCode = 'wgs84';
+    }
+    if (wkt.datumCode.slice(-6) === '_ferro') {
+      wkt.datumCode = wkt.datumCode.slice(0, - 6);
+    }
+    if (wkt.datumCode.slice(-8) === '_jakarta') {
+      wkt.datumCode = wkt.datumCode.slice(0, - 8);
+    }
+    if (~wkt.datumCode.indexOf('belge')) {
+      wkt.datumCode = "rnb72";
+    }
+    if (wkt.GEOGCS.DATUM && wkt.GEOGCS.DATUM.SPHEROID) {
+      wkt.ellps = wkt.GEOGCS.DATUM.SPHEROID.name.replace('_19', '').replace(/[Cc]larke\_18/, 'clrk');
+      if (wkt.ellps.toLowerCase().slice(0, 13) === "international") {
+        wkt.ellps = 'intl';
+      }
+
+      wkt.a = wkt.GEOGCS.DATUM.SPHEROID.a;
+      wkt.rf = parseFloat(wkt.GEOGCS.DATUM.SPHEROID.rf, 10);
+    }
+    if (~wkt.datumCode.indexOf('osgb_1936')) {
+      wkt.datumCode = "osgb36";
+    }
+  }
+  if (wkt.b && !isFinite(wkt.b)) {
+    wkt.b = wkt.a;
+  }
+
+  function toMeter(input) {
+    var ratio = wkt.to_meter || 1;
+    return parseFloat(input, 10) * ratio;
+  }
+  var renamer = function(a) {
+    return rename(wkt, a);
+  };
+  var list = [
+    ['standard_parallel_1', 'Standard_Parallel_1'],
+    ['standard_parallel_2', 'Standard_Parallel_2'],
+    ['false_easting', 'False_Easting'],
+    ['false_northing', 'False_Northing'],
+    ['central_meridian', 'Central_Meridian'],
+    ['latitude_of_origin', 'Latitude_Of_Origin'],
+    ['scale_factor', 'Scale_Factor'],
+    ['k0', 'scale_factor'],
+    ['latitude_of_center', 'Latitude_of_center'],
+    ['lat0', 'latitude_of_center', d2r],
+    ['longitude_of_center', 'Longitude_Of_Center'],
+    ['longc', 'longitude_of_center', d2r],
+    ['x0', 'false_easting', toMeter],
+    ['y0', 'false_northing', toMeter],
+    ['long0', 'central_meridian', d2r],
+    ['lat0', 'latitude_of_origin', d2r],
+    ['lat0', 'standard_parallel_1', d2r],
+    ['lat1', 'standard_parallel_1', d2r],
+    ['lat2', 'standard_parallel_2', d2r],
+    ['alpha', 'azimuth', d2r],
+    ['srsCode', 'name']
+  ];
+  list.forEach(renamer);
+  if (!wkt.long0 && wkt.longc && (wkt.PROJECTION === 'Albers_Conic_Equal_Area' || wkt.PROJECTION === "Lambert_Azimuthal_Equal_Area")) {
+    wkt.long0 = wkt.longc;
+  }
+}
+module.exports = function(wkt, self) {
+  var lisp = JSON.parse(("," + wkt).replace(/\s*\,\s*([A-Z_0-9]+?)(\[)/g, ',["$1",').slice(1).replace(/\s*\,\s*([A-Z_0-9]+?)\]/g, ',"$1"]'));
+  var type = lisp.shift();
+  var name = lisp.shift();
+  lisp.unshift(['name', name]);
+  lisp.unshift(['type', type]);
+  lisp.unshift('output');
+  var obj = {};
+  sExpr(lisp, obj);
+  cleanWKT(obj.output);
+  return extend(self, obj.output);
+};
+
+},{"./extend":33}],66:[function(_dereq_,module,exports){
+
+
+
+/**
+ * UTM zones are grouped, and assigned to one of a group of 6
+ * sets.
+ *
+ * {int} @private
+ */
+var NUM_100K_SETS = 6;
+
+/**
+ * The column letters (for easting) of the lower left value, per
+ * set.
+ *
+ * {string} @private
+ */
+var SET_ORIGIN_COLUMN_LETTERS = 'AJSAJS';
+
+/**
+ * The row letters (for northing) of the lower left value, per
+ * set.
+ *
+ * {string} @private
+ */
+var SET_ORIGIN_ROW_LETTERS = 'AFAFAF';
+
+var A = 65; // A
+var I = 73; // I
+var O = 79; // O
+var V = 86; // V
+var Z = 90; // Z
+
+/**
+ * Conversion of lat/lon to MGRS.
+ *
+ * @param {object} ll Object literal with lat and lon properties on a
+ *     WGS84 ellipsoid.
+ * @param {int} accuracy Accuracy in digits (5 for 1 m, 4 for 10 m, 3 for
+ *      100 m, 4 for 1000 m or 5 for 10000 m). Optional, default is 5.
+ * @return {string} the MGRS string for the given location and accuracy.
+ */
+exports.forward = function(ll, accuracy) {
+  accuracy = accuracy || 5; // default accuracy 1m
+  return encode(LLtoUTM({
+    lat: ll[1],
+    lon: ll[0]
+  }), accuracy);
+};
+
+/**
+ * Conversion of MGRS to lat/lon.
+ *
+ * @param {string} mgrs MGRS string.
+ * @return {array} An array with left (longitude), bottom (latitude), right
+ *     (longitude) and top (latitude) values in WGS84, representing the
+ *     bounding box for the provided MGRS reference.
+ */
+exports.inverse = function(mgrs) {
+  var bbox = UTMtoLL(decode(mgrs.toUpperCase()));
+  return [bbox.left, bbox.bottom, bbox.right, bbox.top];
+};
+
+exports.toPoint = function(mgrsStr) {
+  var llbbox = exports.inverse(mgrsStr);
+  return [(llbbox[2] + llbbox[0]) / 2, (llbbox[3] + llbbox[1]) / 2];
+};
+/**
+ * Conversion from degrees to radians.
+ *
+ * @private
+ * @param {number} deg the angle in degrees.
+ * @return {number} the angle in radians.
+ */
+function degToRad(deg) {
+  return (deg * (Math.PI / 180.0));
+}
+
+/**
+ * Conversion from radians to degrees.
+ *
+ * @private
+ * @param {number} rad the angle in radians.
+ * @return {number} the angle in degrees.
+ */
+function radToDeg(rad) {
+  return (180.0 * (rad / Math.PI));
+}
+
+/**
+ * Converts a set of Longitude and Latitude co-ordinates to UTM
+ * using the WGS84 ellipsoid.
+ *
+ * @private
+ * @param {object} ll Object literal with lat and lon properties
+ *     representing the WGS84 coordinate to be converted.
+ * @return {object} Object literal containing the UTM value with easting,
+ *     northing, zoneNumber and zoneLetter properties, and an optional
+ *     accuracy property in digits. Returns null if the conversion failed.
+ */
+function LLtoUTM(ll) {
+  var Lat = ll.lat;
+  var Long = ll.lon;
+  var a = 6378137.0; //ellip.radius;
+  var eccSquared = 0.00669438; //ellip.eccsq;
+  var k0 = 0.9996;
+  var LongOrigin;
+  var eccPrimeSquared;
+  var N, T, C, A, M;
+  var LatRad = degToRad(Lat);
+  var LongRad = degToRad(Long);
+  var LongOriginRad;
+  var ZoneNumber;
+  // (int)
+  ZoneNumber = Math.floor((Long + 180) / 6) + 1;
+
+  //Make sure the longitude 180.00 is in Zone 60
+  if (Long === 180) {
+    ZoneNumber = 60;
+  }
+
+  // Special zone for Norway
+  if (Lat >= 56.0 && Lat < 64.0 && Long >= 3.0 && Long < 12.0) {
+    ZoneNumber = 32;
+  }
+
+  // Special zones for Svalbard
+  if (Lat >= 72.0 && Lat < 84.0) {
+    if (Long >= 0.0 && Long < 9.0) {
+      ZoneNumber = 31;
+    }
+    else if (Long >= 9.0 && Long < 21.0) {
+      ZoneNumber = 33;
+    }
+    else if (Long >= 21.0 && Long < 33.0) {
+      ZoneNumber = 35;
+    }
+    else if (Long >= 33.0 && Long < 42.0) {
+      ZoneNumber = 37;
+    }
+  }
+
+  LongOrigin = (ZoneNumber - 1) * 6 - 180 + 3; //+3 puts origin
+  // in middle of
+  // zone
+  LongOriginRad = degToRad(LongOrigin);
+
+  eccPrimeSquared = (eccSquared) / (1 - eccSquared);
+
+  N = a / Math.sqrt(1 - eccSquared * Math.sin(LatRad) * Math.sin(LatRad));
+  T = Math.tan(LatRad) * Math.tan(LatRad);
+  C = eccPrimeSquared * Math.cos(LatRad) * Math.cos(LatRad);
+  A = Math.cos(LatRad) * (LongRad - LongOriginRad);
+
+  M = a * ((1 - eccSquared / 4 - 3 * eccSquared * eccSquared / 64 - 5 * eccSquared * eccSquared * eccSquared / 256) * LatRad - (3 * eccSquared / 8 + 3 * eccSquared * eccSquared / 32 + 45 * eccSquared * eccSquared * eccSquared / 1024) * Math.sin(2 * LatRad) + (15 * eccSquared * eccSquared / 256 + 45 * eccSquared * eccSquared * eccSquared / 1024) * Math.sin(4 * LatRad) - (35 * eccSquared * eccSquared * eccSquared / 3072) * Math.sin(6 * LatRad));
+
+  var UTMEasting = (k0 * N * (A + (1 - T + C) * A * A * A / 6.0 + (5 - 18 * T + T * T + 72 * C - 58 * eccPrimeSquared) * A * A * A * A * A / 120.0) + 500000.0);
+
+  var UTMNorthing = (k0 * (M + N * Math.tan(LatRad) * (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A * A * A * A / 24.0 + (61 - 58 * T + T * T + 600 * C - 330 * eccPrimeSquared) * A * A * A * A * A * A / 720.0)));
+  if (Lat < 0.0) {
+    UTMNorthing += 10000000.0; //10000000 meter offset for
+    // southern hemisphere
+  }
+
+  return {
+    northing: Math.round(UTMNorthing),
+    easting: Math.round(UTMEasting),
+    zoneNumber: ZoneNumber,
+    zoneLetter: getLetterDesignator(Lat)
+  };
+}
+
+/**
+ * Converts UTM coords to lat/long, using the WGS84 ellipsoid. This is a convenience
+ * class where the Zone can be specified as a single string eg."60N" which
+ * is then broken down into the ZoneNumber and ZoneLetter.
+ *
+ * @private
+ * @param {object} utm An object literal with northing, easting, zoneNumber
+ *     and zoneLetter properties. If an optional accuracy property is
+ *     provided (in meters), a bounding box will be returned instead of
+ *     latitude and longitude.
+ * @return {object} An object literal containing either lat and lon values
+ *     (if no accuracy was provided), or top, right, bottom and left values
+ *     for the bounding box calculated according to the provided accuracy.
+ *     Returns null if the conversion failed.
+ */
+function UTMtoLL(utm) {
+
+  var UTMNorthing = utm.northing;
+  var UTMEasting = utm.easting;
+  var zoneLetter = utm.zoneLetter;
+  var zoneNumber = utm.zoneNumber;
+  // check the ZoneNummber is valid
+  if (zoneNumber < 0 || zoneNumber > 60) {
+    return null;
+  }
+
+  var k0 = 0.9996;
+  var a = 6378137.0; //ellip.radius;
+  var eccSquared = 0.00669438; //ellip.eccsq;
+  var eccPrimeSquared;
+  var e1 = (1 - Math.sqrt(1 - eccSquared)) / (1 + Math.sqrt(1 - eccSquared));
+  var N1, T1, C1, R1, D, M;
+  var LongOrigin;
+  var mu, phi1Rad;
+
+  // remove 500,000 meter offset for longitude
+  var x = UTMEasting - 500000.0;
+  var y = UTMNorthing;
+
+  // We must know somehow if we are in the Northern or Southern
+  // hemisphere, this is the only time we use the letter So even
+  // if the Zone letter isn't exactly correct it should indicate
+  // the hemisphere correctly
+  if (zoneLetter < 'N') {
+    y -= 10000000.0; // remove 10,000,000 meter offset used
+    // for southern hemisphere
+  }
+
+  // There are 60 zones with zone 1 being at West -180 to -174
+  LongOrigin = (zoneNumber - 1) * 6 - 180 + 3; // +3 puts origin
+  // in middle of
+  // zone
+
+  eccPrimeSquared = (eccSquared) / (1 - eccSquared);
+
+  M = y / k0;
+  mu = M / (a * (1 - eccSquared / 4 - 3 * eccSquared * eccSquared / 64 - 5 * eccSquared * eccSquared * eccSquared / 256));
+
+  phi1Rad = mu + (3 * e1 / 2 - 27 * e1 * e1 * e1 / 32) * Math.sin(2 * mu) + (21 * e1 * e1 / 16 - 55 * e1 * e1 * e1 * e1 / 32) * Math.sin(4 * mu) + (151 * e1 * e1 * e1 / 96) * Math.sin(6 * mu);
+  // double phi1 = ProjMath.radToDeg(phi1Rad);
+
+  N1 = a / Math.sqrt(1 - eccSquared * Math.sin(phi1Rad) * Math.sin(phi1Rad));
+  T1 = Math.tan(phi1Rad) * Math.tan(phi1Rad);
+  C1 = eccPrimeSquared * Math.cos(phi1Rad) * Math.cos(phi1Rad);
+  R1 = a * (1 - eccSquared) / Math.pow(1 - eccSquared * Math.sin(phi1Rad) * Math.sin(phi1Rad), 1.5);
+  D = x / (N1 * k0);
+
+  var lat = phi1Rad - (N1 * Math.tan(phi1Rad) / R1) * (D * D / 2 - (5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * eccPrimeSquared) * D * D * D * D / 24 + (61 + 90 * T1 + 298 * C1 + 45 * T1 * T1 - 252 * eccPrimeSquared - 3 * C1 * C1) * D * D * D * D * D * D / 720);
+  lat = radToDeg(lat);
+
+  var lon = (D - (1 + 2 * T1 + C1) * D * D * D / 6 + (5 - 2 * C1 + 28 * T1 - 3 * C1 * C1 + 8 * eccPrimeSquared + 24 * T1 * T1) * D * D * D * D * D / 120) / Math.cos(phi1Rad);
+  lon = LongOrigin + radToDeg(lon);
+
+  var result;
+  if (utm.accuracy) {
+    var topRight = UTMtoLL({
+      northing: utm.northing + utm.accuracy,
+      easting: utm.easting + utm.accuracy,
+      zoneLetter: utm.zoneLetter,
+      zoneNumber: utm.zoneNumber
+    });
+    result = {
+      top: topRight.lat,
+      right: topRight.lon,
+      bottom: lat,
+      left: lon
+    };
+  }
+  else {
+    result = {
+      lat: lat,
+      lon: lon
+    };
+  }
+  return result;
+}
+
+/**
+ * Calculates the MGRS letter designator for the given latitude.
+ *
+ * @private
+ * @param {number} lat The latitude in WGS84 to get the letter designator
+ *     for.
+ * @return {char} The letter designator.
+ */
+function getLetterDesignator(lat) {
+  //This is here as an error flag to show that the Latitude is
+  //outside MGRS limits
+  var LetterDesignator = 'Z';
+
+  if ((84 >= lat) && (lat >= 72)) {
+    LetterDesignator = 'X';
+  }
+  else if ((72 > lat) && (lat >= 64)) {
+    LetterDesignator = 'W';
+  }
+  else if ((64 > lat) && (lat >= 56)) {
+    LetterDesignator = 'V';
+  }
+  else if ((56 > lat) && (lat >= 48)) {
+    LetterDesignator = 'U';
+  }
+  else if ((48 > lat) && (lat >= 40)) {
+    LetterDesignator = 'T';
+  }
+  else if ((40 > lat) && (lat >= 32)) {
+    LetterDesignator = 'S';
+  }
+  else if ((32 > lat) && (lat >= 24)) {
+    LetterDesignator = 'R';
+  }
+  else if ((24 > lat) && (lat >= 16)) {
+    LetterDesignator = 'Q';
+  }
+  else if ((16 > lat) && (lat >= 8)) {
+    LetterDesignator = 'P';
+  }
+  else if ((8 > lat) && (lat >= 0)) {
+    LetterDesignator = 'N';
+  }
+  else if ((0 > lat) && (lat >= -8)) {
+    LetterDesignator = 'M';
+  }
+  else if ((-8 > lat) && (lat >= -16)) {
+    LetterDesignator = 'L';
+  }
+  else if ((-16 > lat) && (lat >= -24)) {
+    LetterDesignator = 'K';
+  }
+  else if ((-24 > lat) && (lat >= -32)) {
+    LetterDesignator = 'J';
+  }
+  else if ((-32 > lat) && (lat >= -40)) {
+    LetterDesignator = 'H';
+  }
+  else if ((-40 > lat) && (lat >= -48)) {
+    LetterDesignator = 'G';
+  }
+  else if ((-48 > lat) && (lat >= -56)) {
+    LetterDesignator = 'F';
+  }
+  else if ((-56 > lat) && (lat >= -64)) {
+    LetterDesignator = 'E';
+  }
+  else if ((-64 > lat) && (lat >= -72)) {
+    LetterDesignator = 'D';
+  }
+  else if ((-72 > lat) && (lat >= -80)) {
+    LetterDesignator = 'C';
+  }
+  return LetterDesignator;
+}
+
+/**
+ * Encodes a UTM location as MGRS string.
+ *
+ * @private
+ * @param {object} utm An object literal with easting, northing,
+ *     zoneLetter, zoneNumber
+ * @param {number} accuracy Accuracy in digits (1-5).
+ * @return {string} MGRS string for the given UTM location.
+ */
+function encode(utm, accuracy) {
+  var seasting = "" + utm.easting,
+    snorthing = "" + utm.northing;
+
+  return utm.zoneNumber + utm.zoneLetter + get100kID(utm.easting, utm.northing, utm.zoneNumber) + seasting.substr(seasting.length - 5, accuracy) + snorthing.substr(snorthing.length - 5, accuracy);
+}
+
+/**
+ * Get the two letter 100k designator for a given UTM easting,
+ * northing and zone number value.
+ *
+ * @private
+ * @param {number} easting
+ * @param {number} northing
+ * @param {number} zoneNumber
+ * @return the two letter 100k designator for the given UTM location.
+ */
+function get100kID(easting, northing, zoneNumber) {
+  var setParm = get100kSetForZone(zoneNumber);
+  var setColumn = Math.floor(easting / 100000);
+  var setRow = Math.floor(northing / 100000) % 20;
+  return getLetter100kID(setColumn, setRow, setParm);
+}
+
+/**
+ * Given a UTM zone number, figure out the MGRS 100K set it is in.
+ *
+ * @private
+ * @param {number} i An UTM zone number.
+ * @return {number} the 100k set the UTM zone is in.
+ */
+function get100kSetForZone(i) {
+  var setParm = i % NUM_100K_SETS;
+  if (setParm === 0) {
+    setParm = NUM_100K_SETS;
+  }
+
+  return setParm;
+}
+
+/**
+ * Get the two-letter MGRS 100k designator given information
+ * translated from the UTM northing, easting and zone number.
+ *
+ * @private
+ * @param {number} column the column index as it relates to the MGRS
+ *        100k set spreadsheet, created from the UTM easting.
+ *        Values are 1-8.
+ * @param {number} row the row index as it relates to the MGRS 100k set
+ *        spreadsheet, created from the UTM northing value. Values
+ *        are from 0-19.
+ * @param {number} parm the set block, as it relates to the MGRS 100k set
+ *        spreadsheet, created from the UTM zone. Values are from
+ *        1-60.
+ * @return two letter MGRS 100k code.
+ */
+function getLetter100kID(column, row, parm) {
+  // colOrigin and rowOrigin are the letters at the origin of the set
+  var index = parm - 1;
+  var colOrigin = SET_ORIGIN_COLUMN_LETTERS.charCodeAt(index);
+  var rowOrigin = SET_ORIGIN_ROW_LETTERS.charCodeAt(index);
+
+  // colInt and rowInt are the letters to build to return
+  var colInt = colOrigin + column - 1;
+  var rowInt = rowOrigin + row;
+  var rollover = false;
+
+  if (colInt > Z) {
+    colInt = colInt - Z + A - 1;
+    rollover = true;
+  }
+
+  if (colInt === I || (colOrigin < I && colInt > I) || ((colInt > I || colOrigin < I) && rollover)) {
+    colInt++;
+  }
+
+  if (colInt === O || (colOrigin < O && colInt > O) || ((colInt > O || colOrigin < O) && rollover)) {
+    colInt++;
+
+    if (colInt === I) {
+      colInt++;
+    }
+  }
+
+  if (colInt > Z) {
+    colInt = colInt - Z + A - 1;
+  }
+
+  if (rowInt > V) {
+    rowInt = rowInt - V + A - 1;
+    rollover = true;
+  }
+  else {
+    rollover = false;
+  }
+
+  if (((rowInt === I) || ((rowOrigin < I) && (rowInt > I))) || (((rowInt > I) || (rowOrigin < I)) && rollover)) {
+    rowInt++;
+  }
+
+  if (((rowInt === O) || ((rowOrigin < O) && (rowInt > O))) || (((rowInt > O) || (rowOrigin < O)) && rollover)) {
+    rowInt++;
+
+    if (rowInt === I) {
+      rowInt++;
+    }
+  }
+
+  if (rowInt > V) {
+    rowInt = rowInt - V + A - 1;
+  }
+
+  var twoLetter = String.fromCharCode(colInt) + String.fromCharCode(rowInt);
+  return twoLetter;
+}
+
+/**
+ * Decode the UTM parameters from a MGRS string.
+ *
+ * @private
+ * @param {string} mgrsString an UPPERCASE coordinate string is expected.
+ * @return {object} An object literal with easting, northing, zoneLetter,
+ *     zoneNumber and accuracy (in meters) properties.
+ */
+function decode(mgrsString) {
+
+  if (mgrsString && mgrsString.length === 0) {
+    throw ("MGRSPoint coverting from nothing");
+  }
+
+  var length = mgrsString.length;
+
+  var hunK = null;
+  var sb = "";
+  var testChar;
+  var i = 0;
+
+  // get Zone number
+  while (!(/[A-Z]/).test(testChar = mgrsString.charAt(i))) {
+    if (i >= 2) {
+      throw ("MGRSPoint bad conversion from: " + mgrsString);
+    }
+    sb += testChar;
+    i++;
+  }
+
+  var zoneNumber = parseInt(sb, 10);
+
+  if (i === 0 || i + 3 > length) {
+    // A good MGRS string has to be 4-5 digits long,
+    // ##AAA/#AAA at least.
+    throw ("MGRSPoint bad conversion from: " + mgrsString);
+  }
+
+  var zoneLetter = mgrsString.charAt(i++);
+
+  // Should we check the zone letter here? Why not.
+  if (zoneLetter <= 'A' || zoneLetter === 'B' || zoneLetter === 'Y' || zoneLetter >= 'Z' || zoneLetter === 'I' || zoneLetter === 'O') {
+    throw ("MGRSPoint zone letter " + zoneLetter + " not handled: " + mgrsString);
+  }
+
+  hunK = mgrsString.substring(i, i += 2);
+
+  var set = get100kSetForZone(zoneNumber);
+
+  var east100k = getEastingFromChar(hunK.charAt(0), set);
+  var north100k = getNorthingFromChar(hunK.charAt(1), set);
+
+  // We have a bug where the northing may be 2000000 too low.
+  // How
+  // do we know when to roll over?
+
+  while (north100k < getMinNorthing(zoneLetter)) {
+    north100k += 2000000;
+  }
+
+  // calculate the char index for easting/northing separator
+  var remainder = length - i;
+
+  if (remainder % 2 !== 0) {
+    throw ("MGRSPoint has to have an even number \nof digits after the zone letter and two 100km letters - front \nhalf for easting meters, second half for \nnorthing meters" + mgrsString);
+  }
+
+  var sep = remainder / 2;
+
+  var sepEasting = 0.0;
+  var sepNorthing = 0.0;
+  var accuracyBonus, sepEastingString, sepNorthingString, easting, northing;
+  if (sep > 0) {
+    accuracyBonus = 100000.0 / Math.pow(10, sep);
+    sepEastingString = mgrsString.substring(i, i + sep);
+    sepEasting = parseFloat(sepEastingString) * accuracyBonus;
+    sepNorthingString = mgrsString.substring(i + sep);
+    sepNorthing = parseFloat(sepNorthingString) * accuracyBonus;
+  }
+
+  easting = sepEasting + east100k;
+  northing = sepNorthing + north100k;
+
+  return {
+    easting: easting,
+    northing: northing,
+    zoneLetter: zoneLetter,
+    zoneNumber: zoneNumber,
+    accuracy: accuracyBonus
+  };
+}
+
+/**
+ * Given the first letter from a two-letter MGRS 100k zone, and given the
+ * MGRS table set for the zone number, figure out the easting value that
+ * should be added to the other, secondary easting value.
+ *
+ * @private
+ * @param {char} e The first letter from a two-letter MGRS 100´k zone.
+ * @param {number} set The MGRS table set for the zone number.
+ * @return {number} The easting value for the given letter and set.
+ */
+function getEastingFromChar(e, set) {
+  // colOrigin is the letter at the origin of the set for the
+  // column
+  var curCol = SET_ORIGIN_COLUMN_LETTERS.charCodeAt(set - 1);
+  var eastingValue = 100000.0;
+  var rewindMarker = false;
+
+  while (curCol !== e.charCodeAt(0)) {
+    curCol++;
+    if (curCol === I) {
+      curCol++;
+    }
+    if (curCol === O) {
+      curCol++;
+    }
+    if (curCol > Z) {
+      if (rewindMarker) {
+        throw ("Bad character: " + e);
+      }
+      curCol = A;
+      rewindMarker = true;
+    }
+    eastingValue += 100000.0;
+  }
+
+  return eastingValue;
+}
+
+/**
+ * Given the second letter from a two-letter MGRS 100k zone, and given the
+ * MGRS table set for the zone number, figure out the northing value that
+ * should be added to the other, secondary northing value. You have to
+ * remember that Northings are determined from the equator, and the vertical
+ * cycle of letters mean a 2000000 additional northing meters. This happens
+ * approx. every 18 degrees of latitude. This method does *NOT* count any
+ * additional northings. You have to figure out how many 2000000 meters need
+ * to be added for the zone letter of the MGRS coordinate.
+ *
+ * @private
+ * @param {char} n Second letter of the MGRS 100k zone
+ * @param {number} set The MGRS table set number, which is dependent on the
+ *     UTM zone number.
+ * @return {number} The northing value for the given letter and set.
+ */
+function getNorthingFromChar(n, set) {
+
+  if (n > 'V') {
+    throw ("MGRSPoint given invalid Northing " + n);
+  }
+
+  // rowOrigin is the letter at the origin of the set for the
+  // column
+  var curRow = SET_ORIGIN_ROW_LETTERS.charCodeAt(set - 1);
+  var northingValue = 0.0;
+  var rewindMarker = false;
+
+  while (curRow !== n.charCodeAt(0)) {
+    curRow++;
+    if (curRow === I) {
+      curRow++;
+    }
+    if (curRow === O) {
+      curRow++;
+    }
+    // fixing a bug making whole application hang in this loop
+    // when 'n' is a wrong character
+    if (curRow > V) {
+      if (rewindMarker) { // making sure that this loop ends
+        throw ("Bad character: " + n);
+      }
+      curRow = A;
+      rewindMarker = true;
+    }
+    northingValue += 100000.0;
+  }
+
+  return northingValue;
+}
+
+/**
+ * The function getMinNorthing returns the minimum northing value of a MGRS
+ * zone.
+ *
+ * Ported from Geotrans' c Lattitude_Band_Value structure table.
+ *
+ * @private
+ * @param {char} zoneLetter The MGRS zone to get the min northing for.
+ * @return {number}
+ */
+function getMinNorthing(zoneLetter) {
+  var northing;
+  switch (zoneLetter) {
+  case 'C':
+    northing = 1100000.0;
+    break;
+  case 'D':
+    northing = 2000000.0;
+    break;
+  case 'E':
+    northing = 2800000.0;
+    break;
+  case 'F':
+    northing = 3700000.0;
+    break;
+  case 'G':
+    northing = 4600000.0;
+    break;
+  case 'H':
+    northing = 5500000.0;
+    break;
+  case 'J':
+    northing = 6400000.0;
+    break;
+  case 'K':
+    northing = 7300000.0;
+    break;
+  case 'L':
+    northing = 8200000.0;
+    break;
+  case 'M':
+    northing = 9100000.0;
+    break;
+  case 'N':
+    northing = 0.0;
+    break;
+  case 'P':
+    northing = 800000.0;
+    break;
+  case 'Q':
+    northing = 1700000.0;
+    break;
+  case 'R':
+    northing = 2600000.0;
+    break;
+  case 'S':
+    northing = 3500000.0;
+    break;
+  case 'T':
+    northing = 4400000.0;
+    break;
+  case 'U':
+    northing = 5300000.0;
+    break;
+  case 'V':
+    northing = 6200000.0;
+    break;
+  case 'W':
+    northing = 7000000.0;
+    break;
+  case 'X':
+    northing = 7900000.0;
+    break;
+  default:
+    northing = -1.0;
+  }
+  if (northing >= 0.0) {
+    return northing;
+  }
+  else {
+    throw ("Invalid zone letter: " + zoneLetter);
+  }
+
+}
+
+},{}],67:[function(_dereq_,module,exports){
+module.exports={
+  "name": "proj4",
+  "version": "2.2.2",
+  "description": "Proj4js is a JavaScript library to transform point coordinates from one coordinate system to another, including datum transformations.",
+  "main": "lib/index.js",
+  "directories": {
+    "test": "test",
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "./node_modules/istanbul/lib/cli.js test ./node_modules/mocha/bin/_mocha test/test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/proj4js/proj4js.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "jam": {
+    "main": "dist/proj4.js",
+    "include": [
+      "dist/proj4.js",
+      "README.md",
+      "AUTHORS",
+      "LICENSE.md"
+    ]
+  },
+  "devDependencies": {
+    "grunt-cli": "~0.1.13",
+    "grunt": "~0.4.2",
+    "grunt-contrib-connect": "~0.6.0",
+    "grunt-contrib-jshint": "~0.8.0",
+    "chai": "~1.8.1",
+    "mocha": "~1.17.1",
+    "grunt-mocha-phantomjs": "~0.4.0",
+    "browserify": "~3.24.5",
+    "grunt-browserify": "~1.3.0",
+    "grunt-contrib-uglify": "~0.3.2",
+    "curl": "git://github.com/cujojs/curl.git",
+    "istanbul": "~0.2.4",
+    "tin": "~0.4.0"
+  },
+  "dependencies": {
+    "mgrs": "0.0.0"
+  }
+}
+},{}],"./includedProjections":[function(_dereq_,module,exports){
+module.exports=_dereq_('gWUPNW');
+},{}],"gWUPNW":[function(_dereq_,module,exports){
+var projs = [
+ _dereq_('./lib/projections/tmerc'),
+	_dereq_('./lib/projections/utm'),
+	_dereq_('./lib/projections/sterea'),
+	_dereq_('./lib/projections/stere'),
+	_dereq_('./lib/projections/somerc'),
+	_dereq_('./lib/projections/omerc'),
+	_dereq_('./lib/projections/lcc'),
+	_dereq_('./lib/projections/krovak'),
+	_dereq_('./lib/projections/cass'),
+	_dereq_('./lib/projections/laea'),
+	_dereq_('./lib/projections/aea'),
+	_dereq_('./lib/projections/gnom'),
+	_dereq_('./lib/projections/cea'),
+	_dereq_('./lib/projections/eqc'),
+	_dereq_('./lib/projections/poly'),
+	_dereq_('./lib/projections/nzmg'),
+	_dereq_('./lib/projections/mill'),
+	_dereq_('./lib/projections/sinu'),
+	_dereq_('./lib/projections/moll'),
+	_dereq_('./lib/projections/eqdc'),
+	_dereq_('./lib/projections/vandg'),
+	_dereq_('./lib/projections/aeqd')
+];
+module.exports = function(proj4){
+ projs.forEach(function(proj){
+   proj4.Proj.projections.add(proj);
+ });
+}
+},{"./lib/projections/aea":39,"./lib/projections/aeqd":40,"./lib/projections/cass":41,"./lib/projections/cea":42,"./lib/projections/eqc":43,"./lib/projections/eqdc":44,"./lib/projections/gnom":46,"./lib/projections/krovak":47,"./lib/projections/laea":48,"./lib/projections/lcc":49,"./lib/projections/mill":52,"./lib/projections/moll":53,"./lib/projections/nzmg":54,"./lib/projections/omerc":55,"./lib/projections/poly":56,"./lib/projections/sinu":57,"./lib/projections/somerc":58,"./lib/projections/stere":59,"./lib/projections/sterea":60,"./lib/projections/tmerc":61,"./lib/projections/utm":62,"./lib/projections/vandg":63}]},{},[35])
+(35)
+});
 (function(t){function x(){for(var a=0;a<h.length;a++)h[a][0](h[a][1]);h=[];m=!1}function n(a,b){h.push([a,b]);m||(m=!0,y(x,0))}function z(a,b){function c(a){p(b,a)}function e(a){k(b,a)}try{a(c,e)}catch(d){e(d)}}function q(a){var b=a.owner,c=b.state_,b=b.data_,e=a[c];a=a.then;if("function"===typeof e){c=l;try{b=e(b)}catch(d){k(a,d)}}u(a,b)||(c===l&&p(a,b),c===r&&k(a,b))}function u(a,b){var c;try{if(a===b)throw new TypeError("A promises callback cannot return that same promise.");if(b&&("function"===
 typeof b||"object"===typeof b)){var e=b.then;if("function"===typeof e)return e.call(b,function(d){c||(c=!0,b!==d?p(a,d):v(a,d))},function(b){c||(c=!0,k(a,b))}),!0}}catch(d){return c||k(a,d),!0}return!1}function p(a,b){a!==b&&u(a,b)||v(a,b)}function v(a,b){a.state_===s&&(a.state_=w,a.data_=b,n(A,a))}function k(a,b){a.state_===s&&(a.state_=w,a.data_=b,n(B,a))}function A(a){a.state_=l;a.then_=a.then_.forEach(q)}function B(a){a.state_=r;a.then_=a.then_.forEach(q)}function f(a){if("function"!==typeof a)throw new TypeError("Promise constructor takes a function argument");
 if(!1===this instanceof f)throw new TypeError("Failed to construct 'Promise': Please use the 'new' operator, this object constructor cannot be called as a function.");this.then_=[];z(a,this)}var g=t.Promise,C=g&&"resolve"in g&&"reject"in g&&"all"in g&&"race"in g&&function(){var a;new g(function(b){a=b});return"function"===typeof a}();"undefined"!==typeof exports&&exports?exports.Promise=f||g:C||(t.Promise=f);var s="pending",w="sealed",l="fulfilled",r="rejected",D=function(){},y="undefined"!==typeof setImmediate?
@@ -108978,6 +114423,5061 @@ else {
 
 })();
 
+!function(e){if("object"==typeof exports&&"undefined"!=typeof module)module.exports=e();else if("function"==typeof define&&define.amd)define([],e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.createKDTree=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+/*!
+ * The buffer module from node.js, for the browser.
+ *
+ * @author   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
+ * @license  MIT
+ */
+
+var base64 = require('base64-js')
+var ieee754 = require('ieee754')
+
+exports.Buffer = Buffer
+exports.SlowBuffer = Buffer
+exports.INSPECT_MAX_BYTES = 50
+Buffer.poolSize = 8192
+
+/**
+ * If `TYPED_ARRAY_SUPPORT`:
+ *   === true    Use Uint8Array implementation (fastest)
+ *   === false   Use Object implementation (most compatible, even IE6)
+ *
+ * Browsers that support typed arrays are IE 10+, Firefox 4+, Chrome 7+, Safari 5.1+,
+ * Opera 11.6+, iOS 4.2+.
+ *
+ * Note:
+ *
+ * - Implementation must support adding new properties to `Uint8Array` instances.
+ *   Firefox 4-29 lacked support, fixed in Firefox 30+.
+ *   See: https://bugzilla.mozilla.org/show_bug.cgi?id=695438.
+ *
+ *  - Chrome 9-10 is missing the `TypedArray.prototype.subarray` function.
+ *
+ *  - IE10 has a broken `TypedArray.prototype.subarray` function which returns arrays of
+ *    incorrect length in some situations.
+ *
+ * We detect these buggy browsers and set `TYPED_ARRAY_SUPPORT` to `false` so they will
+ * get the Object implementation, which is slower but will work correctly.
+ */
+var TYPED_ARRAY_SUPPORT = (function () {
+  try {
+    var buf = new ArrayBuffer(0)
+    var arr = new Uint8Array(buf)
+    arr.foo = function () { return 42 }
+    return 42 === arr.foo() && // typed array instances can be augmented
+        typeof arr.subarray === 'function' && // chrome 9-10 lack `subarray`
+        new Uint8Array(1).subarray(1, 1).byteLength === 0 // ie10 has broken `subarray`
+  } catch (e) {
+    return false
+  }
+})()
+
+/**
+ * Class: Buffer
+ * =============
+ *
+ * The Buffer constructor returns instances of `Uint8Array` that are augmented
+ * with function properties for all the node `Buffer` API functions. We use
+ * `Uint8Array` so that square bracket notation works as expected -- it returns
+ * a single octet.
+ *
+ * By augmenting the instances, we can avoid modifying the `Uint8Array`
+ * prototype.
+ */
+function Buffer (subject, encoding, noZero) {
+  if (!(this instanceof Buffer))
+    return new Buffer(subject, encoding, noZero)
+
+  var type = typeof subject
+
+  // Find the length
+  var length
+  if (type === 'number')
+    length = subject > 0 ? subject >>> 0 : 0
+  else if (type === 'string') {
+    if (encoding === 'base64')
+      subject = base64clean(subject)
+    length = Buffer.byteLength(subject, encoding)
+  } else if (type === 'object' && subject !== null) { // assume object is array-like
+    if (subject.type === 'Buffer' && isArray(subject.data))
+      subject = subject.data
+    length = +subject.length > 0 ? Math.floor(+subject.length) : 0
+  } else
+    throw new Error('First argument needs to be a number, array or string.')
+
+  var buf
+  if (TYPED_ARRAY_SUPPORT) {
+    // Preferred: Return an augmented `Uint8Array` instance for best performance
+    buf = Buffer._augment(new Uint8Array(length))
+  } else {
+    // Fallback: Return THIS instance of Buffer (created by `new`)
+    buf = this
+    buf.length = length
+    buf._isBuffer = true
+  }
+
+  var i
+  if (TYPED_ARRAY_SUPPORT && typeof subject.byteLength === 'number') {
+    // Speed optimization -- use set if we're copying from a typed array
+    buf._set(subject)
+  } else if (isArrayish(subject)) {
+    // Treat array-ish objects as a byte array
+    if (Buffer.isBuffer(subject)) {
+      for (i = 0; i < length; i++)
+        buf[i] = subject.readUInt8(i)
+    } else {
+      for (i = 0; i < length; i++)
+        buf[i] = ((subject[i] % 256) + 256) % 256
+    }
+  } else if (type === 'string') {
+    buf.write(subject, 0, encoding)
+  } else if (type === 'number' && !TYPED_ARRAY_SUPPORT && !noZero) {
+    for (i = 0; i < length; i++) {
+      buf[i] = 0
+    }
+  }
+
+  return buf
+}
+
+// STATIC METHODS
+// ==============
+
+Buffer.isEncoding = function (encoding) {
+  switch (String(encoding).toLowerCase()) {
+    case 'hex':
+    case 'utf8':
+    case 'utf-8':
+    case 'ascii':
+    case 'binary':
+    case 'base64':
+    case 'raw':
+    case 'ucs2':
+    case 'ucs-2':
+    case 'utf16le':
+    case 'utf-16le':
+      return true
+    default:
+      return false
+  }
+}
+
+Buffer.isBuffer = function (b) {
+  return !!(b != null && b._isBuffer)
+}
+
+Buffer.byteLength = function (str, encoding) {
+  var ret
+  str = str.toString()
+  switch (encoding || 'utf8') {
+    case 'hex':
+      ret = str.length / 2
+      break
+    case 'utf8':
+    case 'utf-8':
+      ret = utf8ToBytes(str).length
+      break
+    case 'ascii':
+    case 'binary':
+    case 'raw':
+      ret = str.length
+      break
+    case 'base64':
+      ret = base64ToBytes(str).length
+      break
+    case 'ucs2':
+    case 'ucs-2':
+    case 'utf16le':
+    case 'utf-16le':
+      ret = str.length * 2
+      break
+    default:
+      throw new Error('Unknown encoding')
+  }
+  return ret
+}
+
+Buffer.concat = function (list, totalLength) {
+  assert(isArray(list), 'Usage: Buffer.concat(list[, length])')
+
+  if (list.length === 0) {
+    return new Buffer(0)
+  } else if (list.length === 1) {
+    return list[0]
+  }
+
+  var i
+  if (totalLength === undefined) {
+    totalLength = 0
+    for (i = 0; i < list.length; i++) {
+      totalLength += list[i].length
+    }
+  }
+
+  var buf = new Buffer(totalLength)
+  var pos = 0
+  for (i = 0; i < list.length; i++) {
+    var item = list[i]
+    item.copy(buf, pos)
+    pos += item.length
+  }
+  return buf
+}
+
+Buffer.compare = function (a, b) {
+  assert(Buffer.isBuffer(a) && Buffer.isBuffer(b), 'Arguments must be Buffers')
+  var x = a.length
+  var y = b.length
+  for (var i = 0, len = Math.min(x, y); i < len && a[i] === b[i]; i++) {}
+  if (i !== len) {
+    x = a[i]
+    y = b[i]
+  }
+  if (x < y) {
+    return -1
+  }
+  if (y < x) {
+    return 1
+  }
+  return 0
+}
+
+// BUFFER INSTANCE METHODS
+// =======================
+
+function hexWrite (buf, string, offset, length) {
+  offset = Number(offset) || 0
+  var remaining = buf.length - offset
+  if (!length) {
+    length = remaining
+  } else {
+    length = Number(length)
+    if (length > remaining) {
+      length = remaining
+    }
+  }
+
+  // must be an even number of digits
+  var strLen = string.length
+  assert(strLen % 2 === 0, 'Invalid hex string')
+
+  if (length > strLen / 2) {
+    length = strLen / 2
+  }
+  for (var i = 0; i < length; i++) {
+    var byte = parseInt(string.substr(i * 2, 2), 16)
+    assert(!isNaN(byte), 'Invalid hex string')
+    buf[offset + i] = byte
+  }
+  return i
+}
+
+function utf8Write (buf, string, offset, length) {
+  var charsWritten = blitBuffer(utf8ToBytes(string), buf, offset, length)
+  return charsWritten
+}
+
+function asciiWrite (buf, string, offset, length) {
+  var charsWritten = blitBuffer(asciiToBytes(string), buf, offset, length)
+  return charsWritten
+}
+
+function binaryWrite (buf, string, offset, length) {
+  return asciiWrite(buf, string, offset, length)
+}
+
+function base64Write (buf, string, offset, length) {
+  var charsWritten = blitBuffer(base64ToBytes(string), buf, offset, length)
+  return charsWritten
+}
+
+function utf16leWrite (buf, string, offset, length) {
+  var charsWritten = blitBuffer(utf16leToBytes(string), buf, offset, length)
+  return charsWritten
+}
+
+Buffer.prototype.write = function (string, offset, length, encoding) {
+  // Support both (string, offset, length, encoding)
+  // and the legacy (string, encoding, offset, length)
+  if (isFinite(offset)) {
+    if (!isFinite(length)) {
+      encoding = length
+      length = undefined
+    }
+  } else {  // legacy
+    var swap = encoding
+    encoding = offset
+    offset = length
+    length = swap
+  }
+
+  offset = Number(offset) || 0
+  var remaining = this.length - offset
+  if (!length) {
+    length = remaining
+  } else {
+    length = Number(length)
+    if (length > remaining) {
+      length = remaining
+    }
+  }
+  encoding = String(encoding || 'utf8').toLowerCase()
+
+  var ret
+  switch (encoding) {
+    case 'hex':
+      ret = hexWrite(this, string, offset, length)
+      break
+    case 'utf8':
+    case 'utf-8':
+      ret = utf8Write(this, string, offset, length)
+      break
+    case 'ascii':
+      ret = asciiWrite(this, string, offset, length)
+      break
+    case 'binary':
+      ret = binaryWrite(this, string, offset, length)
+      break
+    case 'base64':
+      ret = base64Write(this, string, offset, length)
+      break
+    case 'ucs2':
+    case 'ucs-2':
+    case 'utf16le':
+    case 'utf-16le':
+      ret = utf16leWrite(this, string, offset, length)
+      break
+    default:
+      throw new Error('Unknown encoding')
+  }
+  return ret
+}
+
+Buffer.prototype.toString = function (encoding, start, end) {
+  var self = this
+
+  encoding = String(encoding || 'utf8').toLowerCase()
+  start = Number(start) || 0
+  end = (end === undefined) ? self.length : Number(end)
+
+  // Fastpath empty strings
+  if (end === start)
+    return ''
+
+  var ret
+  switch (encoding) {
+    case 'hex':
+      ret = hexSlice(self, start, end)
+      break
+    case 'utf8':
+    case 'utf-8':
+      ret = utf8Slice(self, start, end)
+      break
+    case 'ascii':
+      ret = asciiSlice(self, start, end)
+      break
+    case 'binary':
+      ret = binarySlice(self, start, end)
+      break
+    case 'base64':
+      ret = base64Slice(self, start, end)
+      break
+    case 'ucs2':
+    case 'ucs-2':
+    case 'utf16le':
+    case 'utf-16le':
+      ret = utf16leSlice(self, start, end)
+      break
+    default:
+      throw new Error('Unknown encoding')
+  }
+  return ret
+}
+
+Buffer.prototype.toJSON = function () {
+  return {
+    type: 'Buffer',
+    data: Array.prototype.slice.call(this._arr || this, 0)
+  }
+}
+
+Buffer.prototype.equals = function (b) {
+  assert(Buffer.isBuffer(b), 'Argument must be a Buffer')
+  return Buffer.compare(this, b) === 0
+}
+
+Buffer.prototype.compare = function (b) {
+  assert(Buffer.isBuffer(b), 'Argument must be a Buffer')
+  return Buffer.compare(this, b)
+}
+
+// copy(targetBuffer, targetStart=0, sourceStart=0, sourceEnd=buffer.length)
+Buffer.prototype.copy = function (target, target_start, start, end) {
+  var source = this
+
+  if (!start) start = 0
+  if (!end && end !== 0) end = this.length
+  if (!target_start) target_start = 0
+
+  // Copy 0 bytes; we're done
+  if (end === start) return
+  if (target.length === 0 || source.length === 0) return
+
+  // Fatal error conditions
+  assert(end >= start, 'sourceEnd < sourceStart')
+  assert(target_start >= 0 && target_start < target.length,
+      'targetStart out of bounds')
+  assert(start >= 0 && start < source.length, 'sourceStart out of bounds')
+  assert(end >= 0 && end <= source.length, 'sourceEnd out of bounds')
+
+  // Are we oob?
+  if (end > this.length)
+    end = this.length
+  if (target.length - target_start < end - start)
+    end = target.length - target_start + start
+
+  var len = end - start
+
+  if (len < 100 || !TYPED_ARRAY_SUPPORT) {
+    for (var i = 0; i < len; i++) {
+      target[i + target_start] = this[i + start]
+    }
+  } else {
+    target._set(this.subarray(start, start + len), target_start)
+  }
+}
+
+function base64Slice (buf, start, end) {
+  if (start === 0 && end === buf.length) {
+    return base64.fromByteArray(buf)
+  } else {
+    return base64.fromByteArray(buf.slice(start, end))
+  }
+}
+
+function utf8Slice (buf, start, end) {
+  var res = ''
+  var tmp = ''
+  end = Math.min(buf.length, end)
+
+  for (var i = start; i < end; i++) {
+    if (buf[i] <= 0x7F) {
+      res += decodeUtf8Char(tmp) + String.fromCharCode(buf[i])
+      tmp = ''
+    } else {
+      tmp += '%' + buf[i].toString(16)
+    }
+  }
+
+  return res + decodeUtf8Char(tmp)
+}
+
+function asciiSlice (buf, start, end) {
+  var ret = ''
+  end = Math.min(buf.length, end)
+
+  for (var i = start; i < end; i++) {
+    ret += String.fromCharCode(buf[i])
+  }
+  return ret
+}
+
+function binarySlice (buf, start, end) {
+  return asciiSlice(buf, start, end)
+}
+
+function hexSlice (buf, start, end) {
+  var len = buf.length
+
+  if (!start || start < 0) start = 0
+  if (!end || end < 0 || end > len) end = len
+
+  var out = ''
+  for (var i = start; i < end; i++) {
+    out += toHex(buf[i])
+  }
+  return out
+}
+
+function utf16leSlice (buf, start, end) {
+  var bytes = buf.slice(start, end)
+  var res = ''
+  for (var i = 0; i < bytes.length; i += 2) {
+    res += String.fromCharCode(bytes[i] + bytes[i + 1] * 256)
+  }
+  return res
+}
+
+Buffer.prototype.slice = function (start, end) {
+  var len = this.length
+  start = ~~start
+  end = end === undefined ? len : ~~end
+
+  if (start < 0) {
+    start += len;
+    if (start < 0)
+      start = 0
+  } else if (start > len) {
+    start = len
+  }
+
+  if (end < 0) {
+    end += len
+    if (end < 0)
+      end = 0
+  } else if (end > len) {
+    end = len
+  }
+
+  if (end < start)
+    end = start
+
+  if (TYPED_ARRAY_SUPPORT) {
+    return Buffer._augment(this.subarray(start, end))
+  } else {
+    var sliceLen = end - start
+    var newBuf = new Buffer(sliceLen, undefined, true)
+    for (var i = 0; i < sliceLen; i++) {
+      newBuf[i] = this[i + start]
+    }
+    return newBuf
+  }
+}
+
+// `get` will be removed in Node 0.13+
+Buffer.prototype.get = function (offset) {
+  console.log('.get() is deprecated. Access using array indexes instead.')
+  return this.readUInt8(offset)
+}
+
+// `set` will be removed in Node 0.13+
+Buffer.prototype.set = function (v, offset) {
+  console.log('.set() is deprecated. Access using array indexes instead.')
+  return this.writeUInt8(v, offset)
+}
+
+Buffer.prototype.readUInt8 = function (offset, noAssert) {
+  if (!noAssert) {
+    assert(offset !== undefined && offset !== null, 'missing offset')
+    assert(offset < this.length, 'Trying to read beyond buffer length')
+  }
+
+  if (offset >= this.length)
+    return
+
+  return this[offset]
+}
+
+function readUInt16 (buf, offset, littleEndian, noAssert) {
+  if (!noAssert) {
+    assert(typeof littleEndian === 'boolean', 'missing or invalid endian')
+    assert(offset !== undefined && offset !== null, 'missing offset')
+    assert(offset + 1 < buf.length, 'Trying to read beyond buffer length')
+  }
+
+  var len = buf.length
+  if (offset >= len)
+    return
+
+  var val
+  if (littleEndian) {
+    val = buf[offset]
+    if (offset + 1 < len)
+      val |= buf[offset + 1] << 8
+  } else {
+    val = buf[offset] << 8
+    if (offset + 1 < len)
+      val |= buf[offset + 1]
+  }
+  return val
+}
+
+Buffer.prototype.readUInt16LE = function (offset, noAssert) {
+  return readUInt16(this, offset, true, noAssert)
+}
+
+Buffer.prototype.readUInt16BE = function (offset, noAssert) {
+  return readUInt16(this, offset, false, noAssert)
+}
+
+function readUInt32 (buf, offset, littleEndian, noAssert) {
+  if (!noAssert) {
+    assert(typeof littleEndian === 'boolean', 'missing or invalid endian')
+    assert(offset !== undefined && offset !== null, 'missing offset')
+    assert(offset + 3 < buf.length, 'Trying to read beyond buffer length')
+  }
+
+  var len = buf.length
+  if (offset >= len)
+    return
+
+  var val
+  if (littleEndian) {
+    if (offset + 2 < len)
+      val = buf[offset + 2] << 16
+    if (offset + 1 < len)
+      val |= buf[offset + 1] << 8
+    val |= buf[offset]
+    if (offset + 3 < len)
+      val = val + (buf[offset + 3] << 24 >>> 0)
+  } else {
+    if (offset + 1 < len)
+      val = buf[offset + 1] << 16
+    if (offset + 2 < len)
+      val |= buf[offset + 2] << 8
+    if (offset + 3 < len)
+      val |= buf[offset + 3]
+    val = val + (buf[offset] << 24 >>> 0)
+  }
+  return val
+}
+
+Buffer.prototype.readUInt32LE = function (offset, noAssert) {
+  return readUInt32(this, offset, true, noAssert)
+}
+
+Buffer.prototype.readUInt32BE = function (offset, noAssert) {
+  return readUInt32(this, offset, false, noAssert)
+}
+
+Buffer.prototype.readInt8 = function (offset, noAssert) {
+  if (!noAssert) {
+    assert(offset !== undefined && offset !== null,
+        'missing offset')
+    assert(offset < this.length, 'Trying to read beyond buffer length')
+  }
+
+  if (offset >= this.length)
+    return
+
+  var neg = this[offset] & 0x80
+  if (neg)
+    return (0xff - this[offset] + 1) * -1
+  else
+    return this[offset]
+}
+
+function readInt16 (buf, offset, littleEndian, noAssert) {
+  if (!noAssert) {
+    assert(typeof littleEndian === 'boolean', 'missing or invalid endian')
+    assert(offset !== undefined && offset !== null, 'missing offset')
+    assert(offset + 1 < buf.length, 'Trying to read beyond buffer length')
+  }
+
+  var len = buf.length
+  if (offset >= len)
+    return
+
+  var val = readUInt16(buf, offset, littleEndian, true)
+  var neg = val & 0x8000
+  if (neg)
+    return (0xffff - val + 1) * -1
+  else
+    return val
+}
+
+Buffer.prototype.readInt16LE = function (offset, noAssert) {
+  return readInt16(this, offset, true, noAssert)
+}
+
+Buffer.prototype.readInt16BE = function (offset, noAssert) {
+  return readInt16(this, offset, false, noAssert)
+}
+
+function readInt32 (buf, offset, littleEndian, noAssert) {
+  if (!noAssert) {
+    assert(typeof littleEndian === 'boolean', 'missing or invalid endian')
+    assert(offset !== undefined && offset !== null, 'missing offset')
+    assert(offset + 3 < buf.length, 'Trying to read beyond buffer length')
+  }
+
+  var len = buf.length
+  if (offset >= len)
+    return
+
+  var val = readUInt32(buf, offset, littleEndian, true)
+  var neg = val & 0x80000000
+  if (neg)
+    return (0xffffffff - val + 1) * -1
+  else
+    return val
+}
+
+Buffer.prototype.readInt32LE = function (offset, noAssert) {
+  return readInt32(this, offset, true, noAssert)
+}
+
+Buffer.prototype.readInt32BE = function (offset, noAssert) {
+  return readInt32(this, offset, false, noAssert)
+}
+
+function readFloat (buf, offset, littleEndian, noAssert) {
+  if (!noAssert) {
+    assert(typeof littleEndian === 'boolean', 'missing or invalid endian')
+    assert(offset + 3 < buf.length, 'Trying to read beyond buffer length')
+  }
+
+  return ieee754.read(buf, offset, littleEndian, 23, 4)
+}
+
+Buffer.prototype.readFloatLE = function (offset, noAssert) {
+  return readFloat(this, offset, true, noAssert)
+}
+
+Buffer.prototype.readFloatBE = function (offset, noAssert) {
+  return readFloat(this, offset, false, noAssert)
+}
+
+function readDouble (buf, offset, littleEndian, noAssert) {
+  if (!noAssert) {
+    assert(typeof littleEndian === 'boolean', 'missing or invalid endian')
+    assert(offset + 7 < buf.length, 'Trying to read beyond buffer length')
+  }
+
+  return ieee754.read(buf, offset, littleEndian, 52, 8)
+}
+
+Buffer.prototype.readDoubleLE = function (offset, noAssert) {
+  return readDouble(this, offset, true, noAssert)
+}
+
+Buffer.prototype.readDoubleBE = function (offset, noAssert) {
+  return readDouble(this, offset, false, noAssert)
+}
+
+Buffer.prototype.writeUInt8 = function (value, offset, noAssert) {
+  if (!noAssert) {
+    assert(value !== undefined && value !== null, 'missing value')
+    assert(offset !== undefined && offset !== null, 'missing offset')
+    assert(offset < this.length, 'trying to write beyond buffer length')
+    verifuint(value, 0xff)
+  }
+
+  if (offset >= this.length) return
+
+  this[offset] = value
+  return offset + 1
+}
+
+function writeUInt16 (buf, value, offset, littleEndian, noAssert) {
+  if (!noAssert) {
+    assert(value !== undefined && value !== null, 'missing value')
+    assert(typeof littleEndian === 'boolean', 'missing or invalid endian')
+    assert(offset !== undefined && offset !== null, 'missing offset')
+    assert(offset + 1 < buf.length, 'trying to write beyond buffer length')
+    verifuint(value, 0xffff)
+  }
+
+  var len = buf.length
+  if (offset >= len)
+    return
+
+  for (var i = 0, j = Math.min(len - offset, 2); i < j; i++) {
+    buf[offset + i] =
+        (value & (0xff << (8 * (littleEndian ? i : 1 - i)))) >>>
+            (littleEndian ? i : 1 - i) * 8
+  }
+  return offset + 2
+}
+
+Buffer.prototype.writeUInt16LE = function (value, offset, noAssert) {
+  return writeUInt16(this, value, offset, true, noAssert)
+}
+
+Buffer.prototype.writeUInt16BE = function (value, offset, noAssert) {
+  return writeUInt16(this, value, offset, false, noAssert)
+}
+
+function writeUInt32 (buf, value, offset, littleEndian, noAssert) {
+  if (!noAssert) {
+    assert(value !== undefined && value !== null, 'missing value')
+    assert(typeof littleEndian === 'boolean', 'missing or invalid endian')
+    assert(offset !== undefined && offset !== null, 'missing offset')
+    assert(offset + 3 < buf.length, 'trying to write beyond buffer length')
+    verifuint(value, 0xffffffff)
+  }
+
+  var len = buf.length
+  if (offset >= len)
+    return
+
+  for (var i = 0, j = Math.min(len - offset, 4); i < j; i++) {
+    buf[offset + i] =
+        (value >>> (littleEndian ? i : 3 - i) * 8) & 0xff
+  }
+  return offset + 4
+}
+
+Buffer.prototype.writeUInt32LE = function (value, offset, noAssert) {
+  return writeUInt32(this, value, offset, true, noAssert)
+}
+
+Buffer.prototype.writeUInt32BE = function (value, offset, noAssert) {
+  return writeUInt32(this, value, offset, false, noAssert)
+}
+
+Buffer.prototype.writeInt8 = function (value, offset, noAssert) {
+  if (!noAssert) {
+    assert(value !== undefined && value !== null, 'missing value')
+    assert(offset !== undefined && offset !== null, 'missing offset')
+    assert(offset < this.length, 'Trying to write beyond buffer length')
+    verifsint(value, 0x7f, -0x80)
+  }
+
+  if (offset >= this.length)
+    return
+
+  if (value >= 0)
+    this.writeUInt8(value, offset, noAssert)
+  else
+    this.writeUInt8(0xff + value + 1, offset, noAssert)
+  return offset + 1
+}
+
+function writeInt16 (buf, value, offset, littleEndian, noAssert) {
+  if (!noAssert) {
+    assert(value !== undefined && value !== null, 'missing value')
+    assert(typeof littleEndian === 'boolean', 'missing or invalid endian')
+    assert(offset !== undefined && offset !== null, 'missing offset')
+    assert(offset + 1 < buf.length, 'Trying to write beyond buffer length')
+    verifsint(value, 0x7fff, -0x8000)
+  }
+
+  var len = buf.length
+  if (offset >= len)
+    return
+
+  if (value >= 0)
+    writeUInt16(buf, value, offset, littleEndian, noAssert)
+  else
+    writeUInt16(buf, 0xffff + value + 1, offset, littleEndian, noAssert)
+  return offset + 2
+}
+
+Buffer.prototype.writeInt16LE = function (value, offset, noAssert) {
+  return writeInt16(this, value, offset, true, noAssert)
+}
+
+Buffer.prototype.writeInt16BE = function (value, offset, noAssert) {
+  return writeInt16(this, value, offset, false, noAssert)
+}
+
+function writeInt32 (buf, value, offset, littleEndian, noAssert) {
+  if (!noAssert) {
+    assert(value !== undefined && value !== null, 'missing value')
+    assert(typeof littleEndian === 'boolean', 'missing or invalid endian')
+    assert(offset !== undefined && offset !== null, 'missing offset')
+    assert(offset + 3 < buf.length, 'Trying to write beyond buffer length')
+    verifsint(value, 0x7fffffff, -0x80000000)
+  }
+
+  var len = buf.length
+  if (offset >= len)
+    return
+
+  if (value >= 0)
+    writeUInt32(buf, value, offset, littleEndian, noAssert)
+  else
+    writeUInt32(buf, 0xffffffff + value + 1, offset, littleEndian, noAssert)
+  return offset + 4
+}
+
+Buffer.prototype.writeInt32LE = function (value, offset, noAssert) {
+  return writeInt32(this, value, offset, true, noAssert)
+}
+
+Buffer.prototype.writeInt32BE = function (value, offset, noAssert) {
+  return writeInt32(this, value, offset, false, noAssert)
+}
+
+function writeFloat (buf, value, offset, littleEndian, noAssert) {
+  if (!noAssert) {
+    assert(value !== undefined && value !== null, 'missing value')
+    assert(typeof littleEndian === 'boolean', 'missing or invalid endian')
+    assert(offset !== undefined && offset !== null, 'missing offset')
+    assert(offset + 3 < buf.length, 'Trying to write beyond buffer length')
+    verifIEEE754(value, 3.4028234663852886e+38, -3.4028234663852886e+38)
+  }
+
+  var len = buf.length
+  if (offset >= len)
+    return
+
+  ieee754.write(buf, value, offset, littleEndian, 23, 4)
+  return offset + 4
+}
+
+Buffer.prototype.writeFloatLE = function (value, offset, noAssert) {
+  return writeFloat(this, value, offset, true, noAssert)
+}
+
+Buffer.prototype.writeFloatBE = function (value, offset, noAssert) {
+  return writeFloat(this, value, offset, false, noAssert)
+}
+
+function writeDouble (buf, value, offset, littleEndian, noAssert) {
+  if (!noAssert) {
+    assert(value !== undefined && value !== null, 'missing value')
+    assert(typeof littleEndian === 'boolean', 'missing or invalid endian')
+    assert(offset !== undefined && offset !== null, 'missing offset')
+    assert(offset + 7 < buf.length,
+        'Trying to write beyond buffer length')
+    verifIEEE754(value, 1.7976931348623157E+308, -1.7976931348623157E+308)
+  }
+
+  var len = buf.length
+  if (offset >= len)
+    return
+
+  ieee754.write(buf, value, offset, littleEndian, 52, 8)
+  return offset + 8
+}
+
+Buffer.prototype.writeDoubleLE = function (value, offset, noAssert) {
+  return writeDouble(this, value, offset, true, noAssert)
+}
+
+Buffer.prototype.writeDoubleBE = function (value, offset, noAssert) {
+  return writeDouble(this, value, offset, false, noAssert)
+}
+
+// fill(value, start=0, end=buffer.length)
+Buffer.prototype.fill = function (value, start, end) {
+  if (!value) value = 0
+  if (!start) start = 0
+  if (!end) end = this.length
+
+  assert(end >= start, 'end < start')
+
+  // Fill 0 bytes; we're done
+  if (end === start) return
+  if (this.length === 0) return
+
+  assert(start >= 0 && start < this.length, 'start out of bounds')
+  assert(end >= 0 && end <= this.length, 'end out of bounds')
+
+  var i
+  if (typeof value === 'number') {
+    for (i = start; i < end; i++) {
+      this[i] = value
+    }
+  } else {
+    var bytes = utf8ToBytes(value.toString())
+    var len = bytes.length
+    for (i = start; i < end; i++) {
+      this[i] = bytes[i % len]
+    }
+  }
+
+  return this
+}
+
+Buffer.prototype.inspect = function () {
+  var out = []
+  var len = this.length
+  for (var i = 0; i < len; i++) {
+    out[i] = toHex(this[i])
+    if (i === exports.INSPECT_MAX_BYTES) {
+      out[i + 1] = '...'
+      break
+    }
+  }
+  return '<Buffer ' + out.join(' ') + '>'
+}
+
+/**
+ * Creates a new `ArrayBuffer` with the *copied* memory of the buffer instance.
+ * Added in Node 0.12. Only available in browsers that support ArrayBuffer.
+ */
+Buffer.prototype.toArrayBuffer = function () {
+  if (typeof Uint8Array !== 'undefined') {
+    if (TYPED_ARRAY_SUPPORT) {
+      return (new Buffer(this)).buffer
+    } else {
+      var buf = new Uint8Array(this.length)
+      for (var i = 0, len = buf.length; i < len; i += 1) {
+        buf[i] = this[i]
+      }
+      return buf.buffer
+    }
+  } else {
+    throw new Error('Buffer.toArrayBuffer not supported in this browser')
+  }
+}
+
+// HELPER FUNCTIONS
+// ================
+
+var BP = Buffer.prototype
+
+/**
+ * Augment a Uint8Array *instance* (not the Uint8Array class!) with Buffer methods
+ */
+Buffer._augment = function (arr) {
+  arr._isBuffer = true
+
+  // save reference to original Uint8Array get/set methods before overwriting
+  arr._get = arr.get
+  arr._set = arr.set
+
+  // deprecated, will be removed in node 0.13+
+  arr.get = BP.get
+  arr.set = BP.set
+
+  arr.write = BP.write
+  arr.toString = BP.toString
+  arr.toLocaleString = BP.toString
+  arr.toJSON = BP.toJSON
+  arr.equals = BP.equals
+  arr.compare = BP.compare
+  arr.copy = BP.copy
+  arr.slice = BP.slice
+  arr.readUInt8 = BP.readUInt8
+  arr.readUInt16LE = BP.readUInt16LE
+  arr.readUInt16BE = BP.readUInt16BE
+  arr.readUInt32LE = BP.readUInt32LE
+  arr.readUInt32BE = BP.readUInt32BE
+  arr.readInt8 = BP.readInt8
+  arr.readInt16LE = BP.readInt16LE
+  arr.readInt16BE = BP.readInt16BE
+  arr.readInt32LE = BP.readInt32LE
+  arr.readInt32BE = BP.readInt32BE
+  arr.readFloatLE = BP.readFloatLE
+  arr.readFloatBE = BP.readFloatBE
+  arr.readDoubleLE = BP.readDoubleLE
+  arr.readDoubleBE = BP.readDoubleBE
+  arr.writeUInt8 = BP.writeUInt8
+  arr.writeUInt16LE = BP.writeUInt16LE
+  arr.writeUInt16BE = BP.writeUInt16BE
+  arr.writeUInt32LE = BP.writeUInt32LE
+  arr.writeUInt32BE = BP.writeUInt32BE
+  arr.writeInt8 = BP.writeInt8
+  arr.writeInt16LE = BP.writeInt16LE
+  arr.writeInt16BE = BP.writeInt16BE
+  arr.writeInt32LE = BP.writeInt32LE
+  arr.writeInt32BE = BP.writeInt32BE
+  arr.writeFloatLE = BP.writeFloatLE
+  arr.writeFloatBE = BP.writeFloatBE
+  arr.writeDoubleLE = BP.writeDoubleLE
+  arr.writeDoubleBE = BP.writeDoubleBE
+  arr.fill = BP.fill
+  arr.inspect = BP.inspect
+  arr.toArrayBuffer = BP.toArrayBuffer
+
+  return arr
+}
+
+var INVALID_BASE64_RE = /[^+\/0-9A-z]/g
+
+function base64clean (str) {
+  // Node strips out invalid characters like \n and \t from the string, base64-js does not
+  str = stringtrim(str).replace(INVALID_BASE64_RE, '')
+  // Node allows for non-padded base64 strings (missing trailing ===), base64-js does not
+  while (str.length % 4 !== 0) {
+    str = str + '='
+  }
+  return str
+}
+
+function stringtrim (str) {
+  if (str.trim) return str.trim()
+  return str.replace(/^\s+|\s+$/g, '')
+}
+
+function isArray (subject) {
+  return (Array.isArray || function (subject) {
+    return Object.prototype.toString.call(subject) === '[object Array]'
+  })(subject)
+}
+
+function isArrayish (subject) {
+  return isArray(subject) || Buffer.isBuffer(subject) ||
+      subject && typeof subject === 'object' &&
+      typeof subject.length === 'number'
+}
+
+function toHex (n) {
+  if (n < 16) return '0' + n.toString(16)
+  return n.toString(16)
+}
+
+function utf8ToBytes (str) {
+  var byteArray = []
+  for (var i = 0; i < str.length; i++) {
+    var b = str.charCodeAt(i)
+    if (b <= 0x7F) {
+      byteArray.push(b)
+    } else {
+      var start = i
+      if (b >= 0xD800 && b <= 0xDFFF) i++
+      var h = encodeURIComponent(str.slice(start, i+1)).substr(1).split('%')
+      for (var j = 0; j < h.length; j++) {
+        byteArray.push(parseInt(h[j], 16))
+      }
+    }
+  }
+  return byteArray
+}
+
+function asciiToBytes (str) {
+  var byteArray = []
+  for (var i = 0; i < str.length; i++) {
+    // Node's code seems to be doing this and not & 0x7F..
+    byteArray.push(str.charCodeAt(i) & 0xFF)
+  }
+  return byteArray
+}
+
+function utf16leToBytes (str) {
+  var c, hi, lo
+  var byteArray = []
+  for (var i = 0; i < str.length; i++) {
+    c = str.charCodeAt(i)
+    hi = c >> 8
+    lo = c % 256
+    byteArray.push(lo)
+    byteArray.push(hi)
+  }
+
+  return byteArray
+}
+
+function base64ToBytes (str) {
+  return base64.toByteArray(str)
+}
+
+function blitBuffer (src, dst, offset, length) {
+  for (var i = 0; i < length; i++) {
+    if ((i + offset >= dst.length) || (i >= src.length))
+      break
+    dst[i + offset] = src[i]
+  }
+  return i
+}
+
+function decodeUtf8Char (str) {
+  try {
+    return decodeURIComponent(str)
+  } catch (err) {
+    return String.fromCharCode(0xFFFD) // UTF 8 invalid char
+  }
+}
+
+/*
+ * We have to make sure that the value is a valid integer. This means that it
+ * is non-negative. It has no fractional component and that it does not
+ * exceed the maximum allowed value.
+ */
+function verifuint (value, max) {
+  assert(typeof value === 'number', 'cannot write a non-number as a number')
+  assert(value >= 0, 'specified a negative value for writing an unsigned value')
+  assert(value <= max, 'value is larger than maximum value for type')
+  assert(Math.floor(value) === value, 'value has a fractional component')
+}
+
+function verifsint (value, max, min) {
+  assert(typeof value === 'number', 'cannot write a non-number as a number')
+  assert(value <= max, 'value larger than maximum allowed value')
+  assert(value >= min, 'value smaller than minimum allowed value')
+  assert(Math.floor(value) === value, 'value has a fractional component')
+}
+
+function verifIEEE754 (value, max, min) {
+  assert(typeof value === 'number', 'cannot write a non-number as a number')
+  assert(value <= max, 'value larger than maximum allowed value')
+  assert(value >= min, 'value smaller than minimum allowed value')
+}
+
+function assert (test, message) {
+  if (!test) throw new Error(message || 'Failed assertion')
+}
+
+},{"base64-js":2,"ieee754":3}],2:[function(require,module,exports){
+var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+;(function (exports) {
+	'use strict';
+
+  var Arr = (typeof Uint8Array !== 'undefined')
+    ? Uint8Array
+    : Array
+
+	var PLUS   = '+'.charCodeAt(0)
+	var SLASH  = '/'.charCodeAt(0)
+	var NUMBER = '0'.charCodeAt(0)
+	var LOWER  = 'a'.charCodeAt(0)
+	var UPPER  = 'A'.charCodeAt(0)
+
+	function decode (elt) {
+		var code = elt.charCodeAt(0)
+		if (code === PLUS)
+			return 62 // '+'
+		if (code === SLASH)
+			return 63 // '/'
+		if (code < NUMBER)
+			return -1 //no match
+		if (code < NUMBER + 10)
+			return code - NUMBER + 26 + 26
+		if (code < UPPER + 26)
+			return code - UPPER
+		if (code < LOWER + 26)
+			return code - LOWER + 26
+	}
+
+	function b64ToByteArray (b64) {
+		var i, j, l, tmp, placeHolders, arr
+
+		if (b64.length % 4 > 0) {
+			throw new Error('Invalid string. Length must be a multiple of 4')
+		}
+
+		// the number of equal signs (place holders)
+		// if there are two placeholders, than the two characters before it
+		// represent one byte
+		// if there is only one, then the three characters before it represent 2 bytes
+		// this is just a cheap hack to not do indexOf twice
+		var len = b64.length
+		placeHolders = '=' === b64.charAt(len - 2) ? 2 : '=' === b64.charAt(len - 1) ? 1 : 0
+
+		// base64 is 4/3 + up to two characters of the original data
+		arr = new Arr(b64.length * 3 / 4 - placeHolders)
+
+		// if there are placeholders, only get up to the last complete 4 chars
+		l = placeHolders > 0 ? b64.length - 4 : b64.length
+
+		var L = 0
+
+		function push (v) {
+			arr[L++] = v
+		}
+
+		for (i = 0, j = 0; i < l; i += 4, j += 3) {
+			tmp = (decode(b64.charAt(i)) << 18) | (decode(b64.charAt(i + 1)) << 12) | (decode(b64.charAt(i + 2)) << 6) | decode(b64.charAt(i + 3))
+			push((tmp & 0xFF0000) >> 16)
+			push((tmp & 0xFF00) >> 8)
+			push(tmp & 0xFF)
+		}
+
+		if (placeHolders === 2) {
+			tmp = (decode(b64.charAt(i)) << 2) | (decode(b64.charAt(i + 1)) >> 4)
+			push(tmp & 0xFF)
+		} else if (placeHolders === 1) {
+			tmp = (decode(b64.charAt(i)) << 10) | (decode(b64.charAt(i + 1)) << 4) | (decode(b64.charAt(i + 2)) >> 2)
+			push((tmp >> 8) & 0xFF)
+			push(tmp & 0xFF)
+		}
+
+		return arr
+	}
+
+	function uint8ToBase64 (uint8) {
+		var i,
+			extraBytes = uint8.length % 3, // if we have 1 byte left, pad 2 bytes
+			output = "",
+			temp, length
+
+		function encode (num) {
+			return lookup.charAt(num)
+		}
+
+		function tripletToBase64 (num) {
+			return encode(num >> 18 & 0x3F) + encode(num >> 12 & 0x3F) + encode(num >> 6 & 0x3F) + encode(num & 0x3F)
+		}
+
+		// go through the array every three bytes, we'll deal with trailing stuff later
+		for (i = 0, length = uint8.length - extraBytes; i < length; i += 3) {
+			temp = (uint8[i] << 16) + (uint8[i + 1] << 8) + (uint8[i + 2])
+			output += tripletToBase64(temp)
+		}
+
+		// pad the end with zeros, but make sure to not forget the extra bytes
+		switch (extraBytes) {
+			case 1:
+				temp = uint8[uint8.length - 1]
+				output += encode(temp >> 2)
+				output += encode((temp << 4) & 0x3F)
+				output += '=='
+				break
+			case 2:
+				temp = (uint8[uint8.length - 2] << 8) + (uint8[uint8.length - 1])
+				output += encode(temp >> 10)
+				output += encode((temp >> 4) & 0x3F)
+				output += encode((temp << 2) & 0x3F)
+				output += '='
+				break
+		}
+
+		return output
+	}
+
+	exports.toByteArray = b64ToByteArray
+	exports.fromByteArray = uint8ToBase64
+}(typeof exports === 'undefined' ? (this.base64js = {}) : exports))
+
+},{}],3:[function(require,module,exports){
+exports.read = function(buffer, offset, isLE, mLen, nBytes) {
+  var e, m,
+      eLen = nBytes * 8 - mLen - 1,
+      eMax = (1 << eLen) - 1,
+      eBias = eMax >> 1,
+      nBits = -7,
+      i = isLE ? (nBytes - 1) : 0,
+      d = isLE ? -1 : 1,
+      s = buffer[offset + i];
+
+  i += d;
+
+  e = s & ((1 << (-nBits)) - 1);
+  s >>= (-nBits);
+  nBits += eLen;
+  for (; nBits > 0; e = e * 256 + buffer[offset + i], i += d, nBits -= 8);
+
+  m = e & ((1 << (-nBits)) - 1);
+  e >>= (-nBits);
+  nBits += mLen;
+  for (; nBits > 0; m = m * 256 + buffer[offset + i], i += d, nBits -= 8);
+
+  if (e === 0) {
+    e = 1 - eBias;
+  } else if (e === eMax) {
+    return m ? NaN : ((s ? -1 : 1) * Infinity);
+  } else {
+    m = m + Math.pow(2, mLen);
+    e = e - eBias;
+  }
+  return (s ? -1 : 1) * m * Math.pow(2, e - mLen);
+};
+
+exports.write = function(buffer, value, offset, isLE, mLen, nBytes) {
+  var e, m, c,
+      eLen = nBytes * 8 - mLen - 1,
+      eMax = (1 << eLen) - 1,
+      eBias = eMax >> 1,
+      rt = (mLen === 23 ? Math.pow(2, -24) - Math.pow(2, -77) : 0),
+      i = isLE ? 0 : (nBytes - 1),
+      d = isLE ? 1 : -1,
+      s = value < 0 || (value === 0 && 1 / value < 0) ? 1 : 0;
+
+  value = Math.abs(value);
+
+  if (isNaN(value) || value === Infinity) {
+    m = isNaN(value) ? 1 : 0;
+    e = eMax;
+  } else {
+    e = Math.floor(Math.log(value) / Math.LN2);
+    if (value * (c = Math.pow(2, -e)) < 1) {
+      e--;
+      c *= 2;
+    }
+    if (e + eBias >= 1) {
+      value += rt / c;
+    } else {
+      value += rt * Math.pow(2, 1 - eBias);
+    }
+    if (value * c >= 2) {
+      e++;
+      c /= 2;
+    }
+
+    if (e + eBias >= eMax) {
+      m = 0;
+      e = eMax;
+    } else if (e + eBias >= 1) {
+      m = (value * c - 1) * Math.pow(2, mLen);
+      e = e + eBias;
+    } else {
+      m = value * Math.pow(2, eBias - 1) * Math.pow(2, mLen);
+      e = 0;
+    }
+  }
+
+  for (; mLen >= 8; buffer[offset + i] = m & 0xff, i += d, m /= 256, mLen -= 8);
+
+  e = (e << mLen) | m;
+  eLen += mLen;
+  for (; eLen > 0; buffer[offset + i] = e & 0xff, i += d, e /= 256, eLen -= 8);
+
+  buffer[offset + i - d] |= s * 128;
+};
+
+},{}],4:[function(require,module,exports){
+"use strict"
+
+module.exports = KDTHeap
+
+var pool = require("typedarray-pool")
+
+function heapParent(i) {
+  if(i & 1) {
+    return (i - 1) >> 1
+  }
+  return (i >> 1) - 1
+}
+
+function KDTHeap(n, d) {
+  this.count = 0
+  this.dataSize = d
+  this.index = pool.mallocInt32(n)
+  this.data = pool.mallocFloat64(n*d)
+}
+
+var proto = KDTHeap.prototype
+
+proto.heapSwap = function(_i,_j) {
+  var data = this.data
+  var index = this.index
+  var d = this.dataSize
+  var tmp = index[_i]
+  index[_i] = index[_j]
+  index[_j] = tmp
+  var aptr = d*_i
+  var bptr = d*_j
+  for(var _k=0; _k<d; ++_k) {
+    var t2 = data[aptr]
+    data[aptr] = data[bptr]
+    data[bptr] = t2
+    aptr += 1
+    bptr += 1
+  }
+}
+
+proto.heapUp = function(i) {
+  var d = this.dataSize
+  var index = this.index
+  var data = this.data
+  var w = data[d*i]
+  while(i>0) {
+    var parent = heapParent(i)
+    if(parent >= 0) {
+      var pw = data[d*parent]
+      if(w < pw) {
+        this.heapSwap(i, parent)
+        i = parent
+        continue
+      }
+    }
+    break
+  }
+}
+
+proto.heapDown = function(i) {
+  var d = this.dataSize
+  var index = this.index
+  var data = this.data
+  var count = this.count
+  var w = data[d*i]
+  while(true) {
+    var tw = w
+    var left  = 2*i + 1
+    var right = 2*(i + 1)
+    var next = i
+    if(left < count) {
+      var lw = data[d*left]
+      if(lw < tw) {
+        next = left
+        tw = lw
+      }
+    }
+    if(right < count) {
+      var rw = data[d*right]
+      if(rw < tw) {
+        next = right
+      }
+    }
+    if(next === i) {
+      break
+    }
+    this.heapSwap(i, next)
+    i = next      
+  }
+}
+
+//Clear item from top of heap
+proto.pop = function() {
+  this.count -= 1
+  this.heapSwap(0, this.count)
+  this.heapDown(0)
+}
+
+//Assume object already written to data
+proto.push = function() {
+  this.heapUp(this.count)
+  this.count += 1
+}
+
+proto.dispose = function() {
+  pool.freeInt32(this.index)
+  pool.freeFloat64(this.data)
+}
+},{"typedarray-pool":24}],5:[function(require,module,exports){
+/**
+ * Bit twiddling hacks for JavaScript.
+ *
+ * Author: Mikola Lysenko
+ *
+ * Ported from Stanford bit twiddling hack library:
+ *    http://graphics.stanford.edu/~seander/bithacks.html
+ */
+
+"use strict"; "use restrict";
+
+//Number of bits in an integer
+var INT_BITS = 32;
+
+//Constants
+exports.INT_BITS  = INT_BITS;
+exports.INT_MAX   =  0x7fffffff;
+exports.INT_MIN   = -1<<(INT_BITS-1);
+
+//Returns -1, 0, +1 depending on sign of x
+exports.sign = function(v) {
+  return (v > 0) - (v < 0);
+}
+
+//Computes absolute value of integer
+exports.abs = function(v) {
+  var mask = v >> (INT_BITS-1);
+  return (v ^ mask) - mask;
+}
+
+//Computes minimum of integers x and y
+exports.min = function(x, y) {
+  return y ^ ((x ^ y) & -(x < y));
+}
+
+//Computes maximum of integers x and y
+exports.max = function(x, y) {
+  return x ^ ((x ^ y) & -(x < y));
+}
+
+//Checks if a number is a power of two
+exports.isPow2 = function(v) {
+  return !(v & (v-1)) && (!!v);
+}
+
+//Computes log base 2 of v
+exports.log2 = function(v) {
+  var r, shift;
+  r =     (v > 0xFFFF) << 4; v >>>= r;
+  shift = (v > 0xFF  ) << 3; v >>>= shift; r |= shift;
+  shift = (v > 0xF   ) << 2; v >>>= shift; r |= shift;
+  shift = (v > 0x3   ) << 1; v >>>= shift; r |= shift;
+  return r | (v >> 1);
+}
+
+//Computes log base 10 of v
+exports.log10 = function(v) {
+  return  (v >= 1000000000) ? 9 : (v >= 100000000) ? 8 : (v >= 10000000) ? 7 :
+          (v >= 1000000) ? 6 : (v >= 100000) ? 5 : (v >= 10000) ? 4 :
+          (v >= 1000) ? 3 : (v >= 100) ? 2 : (v >= 10) ? 1 : 0;
+}
+
+//Counts number of bits
+exports.popCount = function(v) {
+  v = v - ((v >>> 1) & 0x55555555);
+  v = (v & 0x33333333) + ((v >>> 2) & 0x33333333);
+  return ((v + (v >>> 4) & 0xF0F0F0F) * 0x1010101) >>> 24;
+}
+
+//Counts number of trailing zeros
+function countTrailingZeros(v) {
+  var c = 32;
+  v &= -v;
+  if (v) c--;
+  if (v & 0x0000FFFF) c -= 16;
+  if (v & 0x00FF00FF) c -= 8;
+  if (v & 0x0F0F0F0F) c -= 4;
+  if (v & 0x33333333) c -= 2;
+  if (v & 0x55555555) c -= 1;
+  return c;
+}
+exports.countTrailingZeros = countTrailingZeros;
+
+//Rounds to next power of 2
+exports.nextPow2 = function(v) {
+  v += v === 0;
+  --v;
+  v |= v >>> 1;
+  v |= v >>> 2;
+  v |= v >>> 4;
+  v |= v >>> 8;
+  v |= v >>> 16;
+  return v + 1;
+}
+
+//Rounds down to previous power of 2
+exports.prevPow2 = function(v) {
+  v |= v >>> 1;
+  v |= v >>> 2;
+  v |= v >>> 4;
+  v |= v >>> 8;
+  v |= v >>> 16;
+  return v - (v>>>1);
+}
+
+//Computes parity of word
+exports.parity = function(v) {
+  v ^= v >>> 16;
+  v ^= v >>> 8;
+  v ^= v >>> 4;
+  v &= 0xf;
+  return (0x6996 >>> v) & 1;
+}
+
+var REVERSE_TABLE = new Array(256);
+
+(function(tab) {
+  for(var i=0; i<256; ++i) {
+    var v = i, r = i, s = 7;
+    for (v >>>= 1; v; v >>>= 1) {
+      r <<= 1;
+      r |= v & 1;
+      --s;
+    }
+    tab[i] = (r << s) & 0xff;
+  }
+})(REVERSE_TABLE);
+
+//Reverse bits in a 32 bit word
+exports.reverse = function(v) {
+  return  (REVERSE_TABLE[ v         & 0xff] << 24) |
+          (REVERSE_TABLE[(v >>> 8)  & 0xff] << 16) |
+          (REVERSE_TABLE[(v >>> 16) & 0xff] << 8)  |
+           REVERSE_TABLE[(v >>> 24) & 0xff];
+}
+
+//Interleave bits of 2 coordinates with 16 bits.  Useful for fast quadtree codes
+exports.interleave2 = function(x, y) {
+  x &= 0xFFFF;
+  x = (x | (x << 8)) & 0x00FF00FF;
+  x = (x | (x << 4)) & 0x0F0F0F0F;
+  x = (x | (x << 2)) & 0x33333333;
+  x = (x | (x << 1)) & 0x55555555;
+
+  y &= 0xFFFF;
+  y = (y | (y << 8)) & 0x00FF00FF;
+  y = (y | (y << 4)) & 0x0F0F0F0F;
+  y = (y | (y << 2)) & 0x33333333;
+  y = (y | (y << 1)) & 0x55555555;
+
+  return x | (y << 1);
+}
+
+//Extracts the nth interleaved component
+exports.deinterleave2 = function(v, n) {
+  v = (v >>> n) & 0x55555555;
+  v = (v | (v >>> 1))  & 0x33333333;
+  v = (v | (v >>> 2))  & 0x0F0F0F0F;
+  v = (v | (v >>> 4))  & 0x00FF00FF;
+  v = (v | (v >>> 16)) & 0x000FFFF;
+  return (v << 16) >> 16;
+}
+
+
+//Interleave bits of 3 coordinates, each with 10 bits.  Useful for fast octree codes
+exports.interleave3 = function(x, y, z) {
+  x &= 0x3FF;
+  x  = (x | (x<<16)) & 4278190335;
+  x  = (x | (x<<8))  & 251719695;
+  x  = (x | (x<<4))  & 3272356035;
+  x  = (x | (x<<2))  & 1227133513;
+
+  y &= 0x3FF;
+  y  = (y | (y<<16)) & 4278190335;
+  y  = (y | (y<<8))  & 251719695;
+  y  = (y | (y<<4))  & 3272356035;
+  y  = (y | (y<<2))  & 1227133513;
+  x |= (y << 1);
+  
+  z &= 0x3FF;
+  z  = (z | (z<<16)) & 4278190335;
+  z  = (z | (z<<8))  & 251719695;
+  z  = (z | (z<<4))  & 3272356035;
+  z  = (z | (z<<2))  & 1227133513;
+  
+  return x | (z << 2);
+}
+
+//Extracts nth interleaved component of a 3-tuple
+exports.deinterleave3 = function(v, n) {
+  v = (v >>> n)       & 1227133513;
+  v = (v | (v>>>2))   & 3272356035;
+  v = (v | (v>>>4))   & 251719695;
+  v = (v | (v>>>8))   & 4278190335;
+  v = (v | (v>>>16))  & 0x3FF;
+  return (v<<22)>>22;
+}
+
+//Computes next combination in colexicographic order (this is mistakenly called nextPermutation on the bit twiddling hacks page)
+exports.nextCombination = function(v) {
+  var t = v | (v - 1);
+  return (t + 1) | (((~t & -~t) - 1) >>> (countTrailingZeros(v) + 1));
+}
+
+
+},{}],6:[function(require,module,exports){
+"use strict"
+
+var bits = require("bit-twiddle")
+
+function rootInorder(n) {
+  var ptree = (bits.nextPow2(n+1)>>>1) - 1
+  var f     = n - ptree
+  if(bits.nextPow2(f)-1 >= ptree) {
+    return ptree
+  }
+  return (ptree>>>1)+f
+}
+exports.root = rootInorder
+
+function beginInorder(n) {
+  return 0
+}
+exports.begin = beginInorder
+
+function endInorder(n) {
+  return n-1
+}
+exports.end = endInorder
+
+
+//This is really horrible because n is not necessarily a power of 2
+// If it was, we could just do:
+//
+//    height = bits.countTrailingZeros(~x)
+//
+// Instead, we just binary search because doing the right thing here is way too complicated.
+function heightInorder(n, x) {
+  if(n <= 0) {
+    return 0
+  }
+  var r = rootInorder(n)
+  if(x > r) {
+    return heightInorder(n-r-1, x-r-1)
+  } else if(x === r) {
+    return bits.log2(n)
+  }
+  return heightInorder(r, x)
+}
+exports.height = heightInorder
+
+function prevInorder(n, x) {
+  return Math.max(x-1,0)
+}
+exports.prev = prevInorder
+
+function nextInorder(n, x) {
+  return Math.min(x+1,n-1)
+}
+exports.next = nextInorder
+
+
+//The version for n = (1<<k)-1:
+//
+//  parent = (x & ~(1<<(h+1))) + (1<<h)
+//
+function parentInorder(n, x) {
+  if(n <= 0) {
+    return -1
+  }
+  var r = rootInorder(n)
+  if(x > r) {
+    var q = parentInorder(n-r-1, x-r-1)
+    if(q < 0) {
+      return r
+    } else {
+      return q + r + 1
+    }
+  } else if(x === r) {
+    return -1
+  }
+  var q =  parentInorder(r, x)
+  if(q < 0) {
+    return r
+  }
+  return q
+}
+exports.parent = parentInorder
+
+
+//Again, we get screwed because n is not a power of two -1.  If it was, we could do:
+//
+//    left = x - (1 << (h-1) )
+//
+// Where h is the height of the node
+//
+function leftInorder(n, x) {
+  if(n <= 0) {
+    return 0
+  }
+  var r = rootInorder(n)
+  if(x > r) {
+    return leftInorder(n-r-1, x-r-1) + r + 1
+  } else if(x === r) {
+    return rootInorder(x)
+  }
+  return leftInorder(r, x)
+
+}
+exports.left = leftInorder
+
+//for power of two minus one:
+//
+//    right = x + (1<<(h-1))
+//
+function rightInorder(n, x) {
+  if(n <= 0) {
+    return 0
+  }
+  var r = rootInorder(n)
+  if(x > r) {
+    return rightInorder(n-r-1, x-r-1) + r + 1
+  } else if(x === r) {
+    return rootInorder(n-r-1) + r + 1
+  }
+  return rightInorder(r, x)
+}
+exports.right = rightInorder
+
+
+function leafInorder(n, x) {
+  return heightInorder(n, x) === 0
+}
+exports.leaf = leafInorder
+
+
+function loInorder(n, x) {
+  n |= 0
+  x |= 0
+  var l = 0
+  while(n > 1) {
+    var r = rootInorder(n)
+    if(x > r) {
+      l += r + 1
+      n -= r + 1
+      x -= r + 1
+    } else if(x === r) {
+      break
+    } else {
+      n = r
+    }
+  }
+  return l
+}
+exports.lo = loInorder
+
+function hiInorder(n, x) {
+  n |= 0
+  x |= 0
+  var l = 0
+  while(n > 1) {
+    var r = rootInorder(n)
+    if(x > r) {
+      l += r + 1
+      n -= r + 1
+      x -= r + 1
+    } else if(x === r) {
+      l += n-1
+      break
+    } else {
+      n = r
+    }
+  }
+  return l
+}
+exports.hi = hiInorder
+
+},{"bit-twiddle":7}],7:[function(require,module,exports){
+module.exports=require(5)
+},{}],8:[function(require,module,exports){
+"use strict"
+
+var compile = require("cwise-compiler")
+
+var EmptyProc = {
+  body: "",
+  args: [],
+  thisVars: [],
+  localVars: []
+}
+
+function fixup(x) {
+  if(!x) {
+    return EmptyProc
+  }
+  for(var i=0; i<x.args.length; ++i) {
+    var a = x.args[i]
+    if(i === 0) {
+      x.args[i] = {name: a, lvalue:true, rvalue: !!x.rvalue, count:x.count||1 }
+    } else {
+      x.args[i] = {name: a, lvalue:false, rvalue:true, count: 1}
+    }
+  }
+  if(!x.thisVars) {
+    x.thisVars = []
+  }
+  if(!x.localVars) {
+    x.localVars = []
+  }
+  return x
+}
+
+function pcompile(user_args) {
+  return compile({
+    args:     user_args.args,
+    pre:      fixup(user_args.pre),
+    body:     fixup(user_args.body),
+    post:     fixup(user_args.proc),
+    funcName: user_args.funcName
+  })
+}
+
+function makeOp(user_args) {
+  var args = []
+  for(var i=0; i<user_args.args.length; ++i) {
+    args.push("a"+i)
+  }
+  var wrapper = new Function("P", [
+    "return function ", user_args.funcName, "_ndarrayops(", args.join(","), ") {P(", args.join(","), ");return a0}"
+  ].join(""))
+  return wrapper(pcompile(user_args))
+}
+
+var assign_ops = {
+  add:  "+",
+  sub:  "-",
+  mul:  "*",
+  div:  "/",
+  mod:  "%",
+  band: "&",
+  bor:  "|",
+  bxor: "^",
+  lshift: "<<",
+  rshift: ">>",
+  rrshift: ">>>"
+}
+;(function(){
+  for(var id in assign_ops) {
+    var op = assign_ops[id]
+    exports[id] = makeOp({
+      args: ["array","array","array"],
+      body: {args:["a","b","c"],
+             body: "a=b"+op+"c"},
+      funcName: id
+    })
+    exports[id+"eq"] = makeOp({
+      args: ["array","array"],
+      body: {args:["a","b"],
+             body:"a"+op+"=b"},
+      rvalue: true,
+      funcName: id+"eq"
+    })
+    exports[id+"s"] = makeOp({
+      args: ["array", "array", "scalar"],
+      body: {args:["a","b","s"],
+             body:"a=b"+op+"s"},
+      funcName: id+"s"
+    })
+    exports[id+"seq"] = makeOp({
+      args: ["array","scalar"],
+      body: {args:["a","s"],
+             body:"a"+op+"=s"},
+      rvalue: true,
+      funcName: id+"seq"
+    })
+  }
+})();
+
+var unary_ops = {
+  not: "!",
+  bnot: "~",
+  neg: "-",
+  recip: "1.0/"
+}
+;(function(){
+  for(var id in unary_ops) {
+    var op = unary_ops[id]
+    exports[id] = makeOp({
+      args: ["array", "array"],
+      body: {args:["a","b"],
+             body:"a="+op+"b"},
+      funcName: id
+    })
+    exports[id+"eq"] = makeOp({
+      args: ["array"],
+      body: {args:["a"],
+             body:"a="+op+"a"},
+      rvalue: true,
+      count: 2,
+      funcName: id+"eq"
+    })
+  }
+})();
+
+var binary_ops = {
+  and: "&&",
+  or: "||",
+  eq: "===",
+  neq: "!==",
+  lt: "<",
+  gt: ">",
+  leq: "<=",
+  geq: ">="
+}
+;(function() {
+  for(var id in binary_ops) {
+    var op = binary_ops[id]
+    exports[id] = makeOp({
+      args: ["array","array","array"],
+      body: {args:["a", "b", "c"],
+             body:"a=b"+op+"c"},
+      funcName: id
+    })
+    exports[id+"s"] = makeOp({
+      args: ["array","array","scalar"],
+      body: {args:["a", "b", "s"],
+             body:"a=b"+op+"s"},
+      funcName: id+"s"
+    })
+    exports[id+"eq"] = makeOp({
+      args: ["array", "array"],
+      body: {args:["a", "b"],
+             body:"a=a"+op+"b"},
+      rvalue:true,
+      count:2,
+      funcName: id+"eq"
+    })
+    exports[id+"seq"] = makeOp({
+      args: ["array", "scalar"],
+      body: {args:["a","s"],
+             body:"a=a"+op+"s"},
+      rvalue:true,
+      count:2,
+      funcName: id+"seq"
+    })
+  }
+})();
+
+var math_unary = [
+  "abs",
+  "acos",
+  "asin",
+  "atan",
+  "ceil",
+  "cos",
+  "exp",
+  "floor",
+  "log",
+  "round",
+  "sin",
+  "sqrt",
+  "tan"
+]
+;(function() {
+  for(var i=0; i<math_unary.length; ++i) {
+    var f = math_unary[i]
+    exports[f] = makeOp({
+                    args: ["array", "array"],
+                    pre: {args:[], body:"this_f=Math."+f, thisVars:["this_f"]},
+                    body: {args:["a","b"], body:"a=this_f(b)", thisVars:["this_f"]},
+                    funcName: f
+                  })
+    exports[f+"eq"] = makeOp({
+                      args: ["array"],
+                      pre: {args:[], body:"this_f=Math."+f, thisVars:["this_f"]},
+                      body: {args: ["a"], body:"a=this_f(a)", thisVars:["this_f"]},
+                      rvalue: true,
+                      count: 2,
+                      funcName: f+"eq"
+                    })
+  }
+})();
+
+var math_comm = [
+  "max",
+  "min",
+  "atan2",
+  "pow"
+]
+;(function(){
+  for(var i=0; i<math_comm.length; ++i) {
+    var f= math_comm[i]
+    exports[f] = makeOp({
+                  args:["array", "array", "array"],
+                  pre: {args:[], body:"this_f=Math."+f, thisVars:["this_f"]},
+                  body: {args:["a","b","c"], body:"a=this_f(b,c)", thisVars:["this_f"]},
+                  funcName: f
+                })
+    exports[f+"s"] = makeOp({
+                  args:["array", "array", "scalar"],
+                  pre: {args:[], body:"this_f=Math."+f, thisVars:["this_f"]},
+                  body: {args:["a","b","c"], body:"a=this_f(b,c)", thisVars:["this_f"]},
+                  funcName: f+"s"
+                  })
+    exports[f+"eq"] = makeOp({ args:["array", "array"],
+                  pre: {args:[], body:"this_f=Math."+f, thisVars:["this_f"]},
+                  body: {args:["a","b"], body:"a=this_f(a,b)", thisVars:["this_f"]},
+                  rvalue: true,
+                  count: 2,
+                  funcName: f+"eq"
+                  })
+    exports[f+"seq"] = makeOp({ args:["array", "scalar"],
+                  pre: {args:[], body:"this_f=Math."+f, thisVars:["this_f"]},
+                  body: {args:["a","b"], body:"a=this_f(a,b)", thisVars:["this_f"]},
+                  rvalue:true,
+                  count:2,
+                  funcName: f+"seq"
+                  })
+  }
+})();
+
+var math_noncomm = [
+  "atan2",
+  "pow"
+]
+;(function(){
+  for(var i=0; i<math_noncomm.length; ++i) {
+    var f= math_noncomm[i]
+    exports[f+"op"] = makeOp({
+                  args:["array", "array", "array"],
+                  pre: {args:[], body:"this_f=Math."+f, thisVars:["this_f"]},
+                  body: {args:["a","b","c"], body:"a=this_f(c,b)", thisVars:["this_f"]},
+                  funcName: f+"op"
+                })
+    exports[f+"ops"] = makeOp({
+                  args:["array", "array", "scalar"],
+                  pre: {args:[], body:"this_f=Math."+f, thisVars:["this_f"]},
+                  body: {args:["a","b","c"], body:"a=this_f(c,b)", thisVars:["this_f"]},
+                  funcName: f+"ops"
+                  })
+    exports[f+"opeq"] = makeOp({ args:["array", "array"],
+                  pre: {args:[], body:"this_f=Math."+f, thisVars:["this_f"]},
+                  body: {args:["a","b"], body:"a=this_f(b,a)", thisVars:["this_f"]},
+                  rvalue: true,
+                  count: 2,
+                  funcName: f+"opeq"
+                  })
+    exports[f+"opseq"] = makeOp({ args:["array", "scalar"],
+                  pre: {args:[], body:"this_f=Math."+f, thisVars:["this_f"]},
+                  body: {args:["a","b"], body:"a=this_f(b,a)", thisVars:["this_f"]},
+                  rvalue:true,
+                  count:2,
+                  funcName: f+"opseq"
+                  })
+  }
+})();
+
+exports.any = compile({
+  args:["array"],
+  pre: EmptyProc,
+  body: {args:[{name:"a", lvalue:false, rvalue:true, count:1}], body: "if(a){return true}", localVars: [], thisVars: []},
+  post: {args:[], localVars:[], thisVars:[], body:"return false"},
+  funcName: "any"
+})
+
+exports.all = compile({
+  args:["array"],
+  pre: EmptyProc,
+  body: {args:[{name:"x", lvalue:false, rvalue:true, count:1}], body: "if(!x){return false}", localVars: [], thisVars: []},
+  post: {args:[], localVars:[], thisVars:[], body:"return true"},
+  funcName: "all"
+})
+
+exports.sum = compile({
+  args:["array"],
+  pre: {args:[], localVars:[], thisVars:["this_s"], body:"this_s=0"},
+  body: {args:[{name:"a", lvalue:false, rvalue:true, count:1}], body: "this_s+=a", localVars: [], thisVars: ["this_s"]},
+  post: {args:[], localVars:[], thisVars:["this_s"], body:"return this_s"},
+  funcName: "sum"
+})
+
+exports.prod = compile({
+  args:["array"],
+  pre: {args:[], localVars:[], thisVars:["this_s"], body:"this_s=1"},
+  body: {args:[{name:"a", lvalue:false, rvalue:true, count:1}], body: "this_s*=a", localVars: [], thisVars: ["this_s"]},
+  post: {args:[], localVars:[], thisVars:["this_s"], body:"return this_s"},
+  funcName: "prod"
+})
+
+exports.norm2squared = compile({
+  args:["array"],
+  pre: {args:[], localVars:[], thisVars:["this_s"], body:"this_s=0"},
+  body: {args:[{name:"a", lvalue:false, rvalue:true, count:2}], body: "this_s+=a*a", localVars: [], thisVars: ["this_s"]},
+  post: {args:[], localVars:[], thisVars:["this_s"], body:"return this_s"},
+  funcName: "norm2squared"
+})
+  
+exports.norm2 = compile({
+  args:["array"],
+  pre: {args:[], localVars:[], thisVars:["this_s"], body:"this_s=0"},
+  body: {args:[{name:"a", lvalue:false, rvalue:true, count:2}], body: "this_s+=a*a", localVars: [], thisVars: ["this_s"]},
+  post: {args:[], localVars:[], thisVars:["this_s"], body:"return Math.sqrt(this_s)"},
+  funcName: "norm2"
+})
+  
+
+exports.norminf = compile({
+  args:["array"],
+  pre: {args:[], localVars:[], thisVars:["this_s"], body:"this_s=0"},
+  body: {args:[{name:"a", lvalue:false, rvalue:true, count:4}], body:"if(-a>this_s){this_s=-a}else if(a>this_s){this_s=a}", localVars: [], thisVars: ["this_s"]},
+  post: {args:[], localVars:[], thisVars:["this_s"], body:"return this_s"},
+  funcName: "norminf"
+})
+
+exports.norm1 = compile({
+  args:["array"],
+  pre: {args:[], localVars:[], thisVars:["this_s"], body:"this_s=0"},
+  body: {args:[{name:"a", lvalue:false, rvalue:true, count:3}], body: "this_s+=a<0?-a:a", localVars: [], thisVars: ["this_s"]},
+  post: {args:[], localVars:[], thisVars:["this_s"], body:"return this_s"},
+  funcName: "norm1"
+})
+
+exports.sup = compile({
+  args: [ "array" ],
+  pre:
+   { body: "this_h=-Infinity",
+     args: [],
+     thisVars: [ "this_h" ],
+     localVars: [] },
+  body:
+   { body: "if(_inline_1_arg0_>this_h)this_h=_inline_1_arg0_",
+     args: [{"name":"_inline_1_arg0_","lvalue":false,"rvalue":true,"count":2} ],
+     thisVars: [ "this_h" ],
+     localVars: [] },
+  post:
+   { body: "return this_h",
+     args: [],
+     thisVars: [ "this_h" ],
+     localVars: [] }
+ })
+
+exports.inf = compile({
+  args: [ "array" ],
+  pre:
+   { body: "this_h=Infinity",
+     args: [],
+     thisVars: [ "this_h" ],
+     localVars: [] },
+  body:
+   { body: "if(_inline_1_arg0_<this_h)this_h=_inline_1_arg0_",
+     args: [{"name":"_inline_1_arg0_","lvalue":false,"rvalue":true,"count":2} ],
+     thisVars: [ "this_h" ],
+     localVars: [] },
+  post:
+   { body: "return this_h",
+     args: [],
+     thisVars: [ "this_h" ],
+     localVars: [] }
+ })
+
+exports.argmin = compile({
+  args:["index","array","shape"],
+  pre:{
+    body:"{this_v=Infinity;this_i=_inline_0_arg2_.slice(0)}",
+    args:[
+      {name:"_inline_0_arg0_",lvalue:false,rvalue:false,count:0},
+      {name:"_inline_0_arg1_",lvalue:false,rvalue:false,count:0},
+      {name:"_inline_0_arg2_",lvalue:false,rvalue:true,count:1}
+      ],
+    thisVars:["this_i","this_v"],
+    localVars:[]},
+  body:{
+    body:"{if(_inline_1_arg1_<this_v){this_v=_inline_1_arg1_;for(var _inline_1_k=0;_inline_1_k<_inline_1_arg0_.length;++_inline_1_k){this_i[_inline_1_k]=_inline_1_arg0_[_inline_1_k]}}}",
+    args:[
+      {name:"_inline_1_arg0_",lvalue:false,rvalue:true,count:2},
+      {name:"_inline_1_arg1_",lvalue:false,rvalue:true,count:2}],
+    thisVars:["this_i","this_v"],
+    localVars:["_inline_1_k"]},
+  post:{
+    body:"{return this_i}",
+    args:[],
+    thisVars:["this_i"],
+    localVars:[]}
+})
+
+exports.argmax = compile({
+  args:["index","array","shape"],
+  pre:{
+    body:"{this_v=-Infinity;this_i=_inline_0_arg2_.slice(0)}",
+    args:[
+      {name:"_inline_0_arg0_",lvalue:false,rvalue:false,count:0},
+      {name:"_inline_0_arg1_",lvalue:false,rvalue:false,count:0},
+      {name:"_inline_0_arg2_",lvalue:false,rvalue:true,count:1}
+      ],
+    thisVars:["this_i","this_v"],
+    localVars:[]},
+  body:{
+    body:"{if(_inline_1_arg1_>this_v){this_v=_inline_1_arg1_;for(var _inline_1_k=0;_inline_1_k<_inline_1_arg0_.length;++_inline_1_k){this_i[_inline_1_k]=_inline_1_arg0_[_inline_1_k]}}}",
+    args:[
+      {name:"_inline_1_arg0_",lvalue:false,rvalue:true,count:2},
+      {name:"_inline_1_arg1_",lvalue:false,rvalue:true,count:2}],
+    thisVars:["this_i","this_v"],
+    localVars:["_inline_1_k"]},
+  post:{
+    body:"{return this_i}",
+    args:[],
+    thisVars:["this_i"],
+    localVars:[]}
+})  
+
+exports.random = makeOp({
+  args: ["array"],
+  pre: {args:[], body:"this_f=Math.random", thisVars:["this_f"]},
+  body: {args: ["a"], body:"a=this_f()", thisVars:["this_f"]},
+  funcName: "random"
+})
+
+exports.assign = makeOp({
+  args:["array", "array"],
+  body: {args:["a", "b"], body:"a=b"},
+  funcName: "assign" })
+
+exports.assigns = makeOp({
+  args:["array", "scalar"],
+  body: {args:["a", "b"], body:"a=b"},
+  funcName: "assigns" })
+
+
+exports.equals = compile({
+  args:["array", "array"],
+  pre: EmptyProc,
+  body: {args:[{name:"x", lvalue:false, rvalue:true, count:1},
+               {name:"y", lvalue:false, rvalue:true, count:1}], 
+        body: "if(x!==y){return false}", 
+        localVars: [], 
+        thisVars: []},
+  post: {args:[], localVars:[], thisVars:[], body:"return true"},
+  funcName: "equals"
+})
+
+
+
+},{"cwise-compiler":9}],9:[function(require,module,exports){
+"use strict"
+
+var createThunk = require("./lib/thunk.js")
+
+function Procedure() {
+  this.argTypes = []
+  this.shimArgs = []
+  this.arrayArgs = []
+  this.scalarArgs = []
+  this.offsetArgs = []
+  this.offsetArgIndex = []
+  this.indexArgs = []
+  this.shapeArgs = []
+  this.funcName = ""
+  this.pre = null
+  this.body = null
+  this.post = null
+  this.debug = false
+}
+
+function compileCwise(user_args) {
+  //Create procedure
+  var proc = new Procedure()
+  
+  //Parse blocks
+  proc.pre    = user_args.pre
+  proc.body   = user_args.body
+  proc.post   = user_args.post
+
+  //Parse arguments
+  var proc_args = user_args.args.slice(0)
+  proc.argTypes = proc_args
+  for(var i=0; i<proc_args.length; ++i) {
+    var arg_type = proc_args[i]
+    if(arg_type === "array") {
+      proc.arrayArgs.push(i)
+      proc.shimArgs.push("array" + i)
+      if(i < proc.pre.args.length && proc.pre.args[i].count>0) {
+        throw new Error("cwise: pre() block may not reference array args")
+      }
+      if(i < proc.post.args.length && proc.post.args[i].count>0) {
+        throw new Error("cwise: post() block may not reference array args")
+      }
+    } else if(arg_type === "scalar") {
+      proc.scalarArgs.push(i)
+      proc.shimArgs.push("scalar" + i)
+    } else if(arg_type === "index") {
+      proc.indexArgs.push(i)
+      if(i < proc.pre.args.length && proc.pre.args[i].count > 0) {
+        throw new Error("cwise: pre() block may not reference array index")
+      }
+      if(i < proc.body.args.length && proc.body.args[i].lvalue) {
+        throw new Error("cwise: body() block may not write to array index")
+      }
+      if(i < proc.post.args.length && proc.post.args[i].count > 0) {
+        throw new Error("cwise: post() block may not reference array index")
+      }
+    } else if(arg_type === "shape") {
+      proc.shapeArgs.push(i)
+      if(i < proc.pre.args.length && proc.pre.args[i].lvalue) {
+        throw new Error("cwise: pre() block may not write to array shape")
+      }
+      if(i < proc.body.args.length && proc.body.args[i].lvalue) {
+        throw new Error("cwise: body() block may not write to array shape")
+      }
+      if(i < proc.post.args.length && proc.post.args[i].lvalue) {
+        throw new Error("cwise: post() block may not write to array shape")
+      }
+    } else if(typeof arg_type === "object" && arg_type.offset) {
+      proc.argTypes[i] = "offset"
+      proc.offsetArgs.push({ array: arg_type.array, offset:arg_type.offset })
+      proc.offsetArgIndex.push(i)
+    } else {
+      throw new Error("cwise: Unknown argument type " + proc_args[i])
+    }
+  }
+  
+  //Make sure at least one array argument was specified
+  if(proc.arrayArgs.length <= 0) {
+    throw new Error("cwise: No array arguments specified")
+  }
+  
+  //Make sure arguments are correct
+  if(proc.pre.args.length > proc_args.length) {
+    throw new Error("cwise: Too many arguments in pre() block")
+  }
+  if(proc.body.args.length > proc_args.length) {
+    throw new Error("cwise: Too many arguments in body() block")
+  }
+  if(proc.post.args.length > proc_args.length) {
+    throw new Error("cwise: Too many arguments in post() block")
+  }
+
+  //Check debug flag
+  proc.debug = !!user_args.printCode || !!user_args.debug
+  
+  //Retrieve name
+  proc.funcName = user_args.funcName || "cwise"
+  
+  //Read in block size
+  proc.blockSize = user_args.blockSize || 64
+
+  return createThunk(proc)
+}
+
+module.exports = compileCwise
+
+},{"./lib/thunk.js":11}],10:[function(require,module,exports){
+"use strict"
+
+var uniq = require("uniq")
+
+function innerFill(order, proc, body) {
+  var dimension = order.length
+    , nargs = proc.arrayArgs.length
+    , has_index = proc.indexArgs.length>0
+    , code = []
+    , vars = []
+    , idx=0, pidx=0, i, j
+  for(i=0; i<dimension; ++i) {
+    vars.push(["i",i,"=0"].join(""))
+  }
+  //Compute scan deltas
+  for(j=0; j<nargs; ++j) {
+    for(i=0; i<dimension; ++i) {
+      pidx = idx
+      idx = order[i]
+      if(i === 0) {
+        vars.push(["d",j,"s",i,"=t",j,"p",idx].join(""))
+      } else {
+        vars.push(["d",j,"s",i,"=(t",j,"p",idx,"-s",pidx,"*t",j,"p",pidx,")"].join(""))
+      }
+    }
+  }
+  code.push("var " + vars.join(","))
+  //Scan loop
+  for(i=dimension-1; i>=0; --i) {
+    idx = order[i]
+    code.push(["for(i",i,"=0;i",i,"<s",idx,";++i",i,"){"].join(""))
+  }
+  //Push body of inner loop
+  code.push(body)
+  //Advance scan pointers
+  for(i=0; i<dimension; ++i) {
+    pidx = idx
+    idx = order[i]
+    for(j=0; j<nargs; ++j) {
+      code.push(["p",j,"+=d",j,"s",i].join(""))
+    }
+    if(has_index) {
+      if(i > 0) {
+        code.push(["index[",pidx,"]-=s",pidx].join(""))
+      }
+      code.push(["++index[",idx,"]"].join(""))
+    }
+    code.push("}")
+  }
+  return code.join("\n")
+}
+
+function outerFill(matched, order, proc, body) {
+  var dimension = order.length
+    , nargs = proc.arrayArgs.length
+    , blockSize = proc.blockSize
+    , has_index = proc.indexArgs.length > 0
+    , code = []
+  for(var i=0; i<nargs; ++i) {
+    code.push(["var offset",i,"=p",i].join(""))
+  }
+  //Generate matched loops
+  for(var i=matched; i<dimension; ++i) {
+    code.push(["for(var j"+i+"=SS[", order[i], "]|0;j", i, ">0;){"].join(""))
+    code.push(["if(j",i,"<",blockSize,"){"].join(""))
+    code.push(["s",order[i],"=j",i].join(""))
+    code.push(["j",i,"=0"].join(""))
+    code.push(["}else{s",order[i],"=",blockSize].join(""))
+    code.push(["j",i,"-=",blockSize,"}"].join(""))
+    if(has_index) {
+      code.push(["index[",order[i],"]=j",i].join(""))
+    }
+  }
+  for(var i=0; i<nargs; ++i) {
+    var indexStr = ["offset"+i]
+    for(var j=matched; j<dimension; ++j) {
+      indexStr.push(["j",j,"*t",i,"p",order[j]].join(""))
+    }
+    code.push(["p",i,"=(",indexStr.join("+"),")"].join(""))
+  }
+  code.push(innerFill(order, proc, body))
+  for(var i=matched; i<dimension; ++i) {
+    code.push("}")
+  }
+  return code.join("\n")
+}
+
+//Count the number of compatible inner orders
+function countMatches(orders) {
+  var matched = 0, dimension = orders[0].length
+  while(matched < dimension) {
+    for(var j=1; j<orders.length; ++j) {
+      if(orders[j][matched] !== orders[0][matched]) {
+        return matched
+      }
+    }
+    ++matched
+  }
+  return matched
+}
+
+//Processes a block according to the given data types
+function processBlock(block, proc, dtypes) {
+  var code = block.body
+  var pre = []
+  var post = []
+  for(var i=0; i<block.args.length; ++i) {
+    var carg = block.args[i]
+    if(carg.count <= 0) {
+      continue
+    }
+    var re = new RegExp(carg.name, "g")
+    var ptrStr = ""
+    var arrNum = proc.arrayArgs.indexOf(i)
+    switch(proc.argTypes[i]) {
+      case "offset":
+        var offArgIndex = proc.offsetArgIndex.indexOf(i)
+        var offArg = proc.offsetArgs[offArgIndex]
+        arrNum = offArg.array
+        ptrStr = "+q" + offArgIndex
+      case "array":
+        ptrStr = "p" + arrNum + ptrStr
+        var localStr = "l" + i
+        var arrStr = "a" + arrNum
+        if(carg.count === 1) {
+          if(dtypes[arrNum] === "generic") {
+            if(carg.lvalue) {
+              pre.push(["var ", localStr, "=", arrStr, ".get(", ptrStr, ")"].join(""))
+              code = code.replace(re, localStr)
+              post.push([arrStr, ".set(", ptrStr, ",", localStr,")"].join(""))
+            } else {
+              code = code.replace(re, [arrStr, ".get(", ptrStr, ")"].join(""))
+            }
+          } else {
+            code = code.replace(re, [arrStr, "[", ptrStr, "]"].join(""))
+          }
+        } else if(dtypes[arrNum] === "generic") {
+          pre.push(["var ", localStr, "=", arrStr, ".get(", ptrStr, ")"].join(""))
+          code = code.replace(re, localStr)
+          if(carg.lvalue) {
+            post.push([arrStr, ".set(", ptrStr, ",", localStr,")"].join(""))
+          }
+        } else {
+          pre.push(["var ", localStr, "=", arrStr, "[", ptrStr, "]"].join(""))
+          code = code.replace(re, localStr)
+          if(carg.lvalue) {
+            post.push([arrStr, "[", ptrStr, "]=", localStr].join(""))
+          }
+        }
+      break
+      case "scalar":
+        code = code.replace(re, "Y" + proc.scalarArgs.indexOf(i))
+      break
+      case "index":
+        code = code.replace(re, "index")
+      break
+      case "shape":
+        code = code.replace(re, "shape")
+      break
+    }
+  }
+  return [pre.join("\n"), code, post.join("\n")].join("\n").trim()
+}
+
+function typeSummary(dtypes) {
+  var summary = new Array(dtypes.length)
+  var allEqual = true
+  for(var i=0; i<dtypes.length; ++i) {
+    var t = dtypes[i]
+    var digits = t.match(/\d+/)
+    if(!digits) {
+      digits = ""
+    } else {
+      digits = digits[0]
+    }
+    if(t.charAt(0) === 0) {
+      summary[i] = "u" + t.charAt(1) + digits
+    } else {
+      summary[i] = t.charAt(0) + digits
+    }
+    if(i > 0) {
+      allEqual = allEqual && summary[i] === summary[i-1]
+    }
+  }
+  if(allEqual) {
+    return summary[0]
+  }
+  return summary.join("")
+}
+
+//Generates a cwise operator
+function generateCWiseOp(proc, typesig) {
+
+  //Compute dimension
+  var dimension = typesig[1].length|0
+  var orders = new Array(proc.arrayArgs.length)
+  var dtypes = new Array(proc.arrayArgs.length)
+
+  //First create arguments for procedure
+  var arglist = ["SS"]
+  var code = ["'use strict'"]
+  var vars = []
+  
+  for(var j=0; j<dimension; ++j) {
+    vars.push(["s", j, "=SS[", j, "]"].join(""))
+  }
+  for(var i=0; i<proc.arrayArgs.length; ++i) {
+    arglist.push("a"+i)
+    arglist.push("t"+i)
+    arglist.push("p"+i)
+    dtypes[i] = typesig[2*i]
+    orders[i] = typesig[2*i+1]
+    
+    for(var j=0; j<dimension; ++j) {
+      vars.push(["t",i,"p",j,"=t",i,"[",j,"]"].join(""))
+    }
+  }
+  for(var i=0; i<proc.scalarArgs.length; ++i) {
+    arglist.push("Y" + i)
+  }
+  if(proc.shapeArgs.length > 0) {
+    vars.push("shape=SS.slice(0)")
+  }
+  if(proc.indexArgs.length > 0) {
+    var zeros = new Array(dimension)
+    for(var i=0; i<dimension; ++i) {
+      zeros[i] = "0"
+    }
+    vars.push(["index=[", zeros.join(","), "]"].join(""))
+  }
+  for(var i=0; i<proc.offsetArgs.length; ++i) {
+    var off_arg = proc.offsetArgs[i]
+    var init_string = []
+    for(var j=0; j<off_arg.offset.length; ++j) {
+      if(off_arg.offset[j] === 0) {
+        continue
+      } else if(off_arg.offset[j] === 1) {
+        init_string.push(["t", off_arg.array, "p", j].join(""))      
+      } else {
+        init_string.push([off_arg.offset[j], "*t", off_arg.array, "p", j].join(""))
+      }
+    }
+    if(init_string.length === 0) {
+      vars.push("q" + i + "=0")
+    } else {
+      vars.push(["q", i, "=", init_string.join("+")].join(""))
+    }
+  }
+
+  //Prepare this variables
+  var thisVars = uniq([].concat(proc.pre.thisVars)
+                      .concat(proc.body.thisVars)
+                      .concat(proc.post.thisVars))
+  vars = vars.concat(thisVars)
+  code.push("var " + vars.join(","))
+  for(var i=0; i<proc.arrayArgs.length; ++i) {
+    code.push("p"+i+"|=0")
+  }
+  
+  //Inline prelude
+  if(proc.pre.body.length > 3) {
+    code.push(processBlock(proc.pre, proc, dtypes))
+  }
+
+  //Process body
+  var body = processBlock(proc.body, proc, dtypes)
+  var matched = countMatches(orders)
+  if(matched < dimension) {
+    code.push(outerFill(matched, orders[0], proc, body))
+  } else {
+    code.push(innerFill(orders[0], proc, body))
+  }
+
+  //Inline epilog
+  if(proc.post.body.length > 3) {
+    code.push(processBlock(proc.post, proc, dtypes))
+  }
+  
+  if(proc.debug) {
+    console.log("Generated cwise routine for ", typesig, ":\n\n", code.join("\n"))
+  }
+  
+  var loopName = [(proc.funcName||"unnamed"), "_cwise_loop_", orders[0].join("s"),"m",matched,typeSummary(dtypes)].join("")
+  var f = new Function(["function ",loopName,"(", arglist.join(","),"){", code.join("\n"),"} return ", loopName].join(""))
+  return f()
+}
+module.exports = generateCWiseOp
+},{"uniq":12}],11:[function(require,module,exports){
+"use strict"
+
+var compile = require("./compile.js")
+
+function createThunk(proc) {
+  var code = ["'use strict'", "var CACHED={}"]
+  var vars = []
+  var thunkName = proc.funcName + "_cwise_thunk"
+  
+  //Build thunk
+  code.push(["return function ", thunkName, "(", proc.shimArgs.join(","), "){"].join(""))
+  var typesig = []
+  var string_typesig = []
+  var proc_args = [["array",proc.arrayArgs[0],".shape"].join("")]
+  for(var i=0; i<proc.arrayArgs.length; ++i) {
+    var j = proc.arrayArgs[i]
+    vars.push(["t", j, "=array", j, ".dtype,",
+               "r", j, "=array", j, ".order"].join(""))
+    typesig.push("t" + j)
+    typesig.push("r" + j)
+    string_typesig.push("t"+j)
+    string_typesig.push("r"+j+".join()")
+    proc_args.push("array" + j + ".data")
+    proc_args.push("array" + j + ".stride")
+    proc_args.push("array" + j + ".offset|0")
+  }
+  for(var i=0; i<proc.scalarArgs.length; ++i) {
+    proc_args.push("scalar" + proc.scalarArgs[i])
+  }
+  vars.push(["type=[", string_typesig.join(","), "].join()"].join(""))
+  vars.push("proc=CACHED[type]")
+  code.push("var " + vars.join(","))
+  
+  code.push(["if(!proc){",
+             "CACHED[type]=proc=compile([", typesig.join(","), "])}",
+             "return proc(", proc_args.join(","), ")}"].join(""))
+
+  if(proc.debug) {
+    console.log("Generated thunk:", code.join("\n"))
+  }
+  
+  //Compile thunk
+  var thunk = new Function("compile", code.join("\n"))
+  return thunk(compile.bind(undefined, proc))
+}
+
+module.exports = createThunk
+
+},{"./compile.js":10}],12:[function(require,module,exports){
+"use strict"
+
+function unique_pred(list, compare) {
+  var ptr = 1
+    , len = list.length
+    , a=list[0], b=list[0]
+  for(var i=1; i<len; ++i) {
+    b = a
+    a = list[i]
+    if(compare(a, b)) {
+      if(i === ptr) {
+        ptr++
+        continue
+      }
+      list[ptr++] = a
+    }
+  }
+  list.length = ptr
+  return list
+}
+
+function unique_eq(list) {
+  var ptr = 1
+    , len = list.length
+    , a=list[0], b = list[0]
+  for(var i=1; i<len; ++i, b=a) {
+    b = a
+    a = list[i]
+    if(a !== b) {
+      if(i === ptr) {
+        ptr++
+        continue
+      }
+      list[ptr++] = a
+    }
+  }
+  list.length = ptr
+  return list
+}
+
+function unique(list, compare, sorted) {
+  if(list.length === 0) {
+    return list
+  }
+  if(compare) {
+    if(!sorted) {
+      list.sort(compare)
+    }
+    return unique_pred(list, compare)
+  }
+  if(!sorted) {
+    list.sort()
+  }
+  return unique_eq(list)
+}
+
+module.exports = unique
+
+},{}],13:[function(require,module,exports){
+"use strict"
+
+var ndarray = require("ndarray")
+var do_convert = require("./doConvert.js")
+
+module.exports = function convert(arr, result) {
+  var shape = [], c = arr, sz = 1
+  while(c instanceof Array) {
+    shape.push(c.length)
+    sz *= c.length
+    c = c[0]
+  }
+  if(shape.length === 0) {
+    return ndarray()
+  }
+  if(!result) {
+    result = ndarray(new Float64Array(sz), shape)
+  }
+  do_convert(result, arr)
+  return result
+}
+
+},{"./doConvert.js":14,"ndarray":21}],14:[function(require,module,exports){
+module.exports=require('cwise-compiler')({"args":["array","scalar","index"],"pre":{"body":"{}","args":[],"thisVars":[],"localVars":[]},"body":{"body":"{\nvar _inline_1_v=_inline_1_arg1_,_inline_1_i\nfor(_inline_1_i=0;_inline_1_i<_inline_1_arg2_.length-1;++_inline_1_i) {\n_inline_1_v=_inline_1_v[_inline_1_arg2_[_inline_1_i]]\n}\n_inline_1_arg0_=_inline_1_v[_inline_1_arg2_[_inline_1_arg2_.length-1]]\n}","args":[{"name":"_inline_1_arg0_","lvalue":true,"rvalue":false,"count":1},{"name":"_inline_1_arg1_","lvalue":false,"rvalue":true,"count":1},{"name":"_inline_1_arg2_","lvalue":false,"rvalue":true,"count":4}],"thisVars":[],"localVars":["_inline_1_i","_inline_1_v"]},"post":{"body":"{}","args":[],"thisVars":[],"localVars":[]},"funcName":"convert","blockSize":64})
+
+},{"cwise-compiler":15}],15:[function(require,module,exports){
+"use strict"
+
+var createThunk = require("./lib/thunk.js")
+
+function Procedure() {
+  this.argTypes = []
+  this.shimArgs = []
+  this.arrayArgs = []
+  this.scalarArgs = []
+  this.offsetArgs = []
+  this.offsetArgIndex = []
+  this.indexArgs = []
+  this.shapeArgs = []
+  this.funcName = ""
+  this.pre = null
+  this.body = null
+  this.post = null
+  this.debug = false
+}
+
+function compileCwise(user_args) {
+  //Create procedure
+  var proc = new Procedure()
+  
+  //Parse blocks
+  proc.pre    = user_args.pre
+  proc.body   = user_args.body
+  proc.post   = user_args.post
+
+  //Parse arguments
+  var proc_args = user_args.args.slice(0)
+  proc.argTypes = proc_args.slice(0)
+  for(var i=0; i<proc_args.length; ++i) {
+    var arg_type = proc_args[i]
+    if(arg_type === "array") {
+      proc.arrayArgs.push(i)
+      proc.shimArgs.push("array" + i)
+      if(i < proc.pre.args.length && proc.pre.args[i].count>0) {
+        throw new Error("cwise: pre() block may not reference array args")
+      }
+      if(i < proc.post.args.length && proc.post.args[i].count>0) {
+        throw new Error("cwise: post() block may not reference array args")
+      }
+    } else if(arg_type === "scalar") {
+      proc.scalarArgs.push(i)
+      proc.shimArgs.push("scalar" + i)
+    } else if(arg_type === "index") {
+      proc.indexArgs.push(i)
+      if(i < proc.pre.args.length && proc.pre.args[i].count > 0) {
+        throw new Error("cwise: pre() block may not reference array index")
+      }
+      if(i < proc.body.args.length && proc.body.args[i].lvalue) {
+        throw new Error("cwise: body() block may not write to array index")
+      }
+      if(i < proc.post.args.length && proc.post.args[i].count > 0) {
+        throw new Error("cwise: post() block may not reference array index")
+      }
+    } else if(arg_type === "shape") {
+      proc.shapeArgs.push(i)
+      if(i < proc.pre.args.length && proc.pre.args[i].lvalue) {
+        throw new Error("cwise: pre() block may not write to array shape")
+      }
+      if(i < proc.body.args.length && proc.body.args[i].lvalue) {
+        throw new Error("cwise: body() block may not write to array shape")
+      }
+      if(i < proc.post.args.length && proc.post.args[i].lvalue) {
+        throw new Error("cwise: post() block may not write to array shape")
+      }
+    } else if(typeof arg_type === "object" && arg_type.offset) {
+      proc.argTypes[i] = "offset"
+      proc.offsetArgs.push({ array: arg_type.array, offset:arg_type.offset })
+      proc.offsetArgIndex.push(i)
+    } else {
+      throw new Error("cwise: Unknown argument type " + proc_args[i])
+    }
+  }
+  
+  //Make sure at least one array argument was specified
+  if(proc.arrayArgs.length <= 0) {
+    throw new Error("cwise: No array arguments specified")
+  }
+  
+  //Make sure arguments are correct
+  if(proc.pre.args.length > proc_args.length) {
+    throw new Error("cwise: Too many arguments in pre() block")
+  }
+  if(proc.body.args.length > proc_args.length) {
+    throw new Error("cwise: Too many arguments in body() block")
+  }
+  if(proc.post.args.length > proc_args.length) {
+    throw new Error("cwise: Too many arguments in post() block")
+  }
+
+  //Check debug flag
+  proc.debug = !!user_args.printCode || !!user_args.debug
+  
+  //Retrieve name
+  proc.funcName = user_args.funcName || "cwise"
+  
+  //Read in block size
+  proc.blockSize = user_args.blockSize || 64
+
+  return createThunk(proc)
+}
+
+module.exports = compileCwise
+
+},{"./lib/thunk.js":17}],16:[function(require,module,exports){
+"use strict"
+
+var uniq = require("uniq")
+
+function innerFill(order, proc, body) {
+  var dimension = order.length
+    , nargs = proc.arrayArgs.length
+    , has_index = proc.indexArgs.length>0
+    , code = []
+    , vars = []
+    , idx=0, pidx=0, i, j
+  for(i=0; i<dimension; ++i) {
+    vars.push(["i",i,"=0"].join(""))
+  }
+  //Compute scan deltas
+  for(j=0; j<nargs; ++j) {
+    for(i=0; i<dimension; ++i) {
+      pidx = idx
+      idx = order[i]
+      if(i === 0) {
+        vars.push(["d",j,"s",i,"=t",j,"[",idx,"]"].join(""))
+      } else {
+        vars.push(["d",j,"s",i,"=(t",j,"[",idx,"]-s",pidx,"*t",j,"[",pidx,"])"].join(""))
+      }
+    }
+  }
+  code.push("var " + vars.join(","))
+  //Scan loop
+  for(i=dimension-1; i>=0; --i) {
+    idx = order[i]
+    code.push(["for(i",i,"=0;i",i,"<s",idx,";++i",i,"){"].join(""))
+  }
+  //Push body of inner loop
+  code.push(body)
+  //Advance scan pointers
+  for(i=0; i<dimension; ++i) {
+    pidx = idx
+    idx = order[i]
+    for(j=0; j<nargs; ++j) {
+      code.push(["p",j,"+=d",j,"s",i].join(""))
+    }
+    if(has_index) {
+      if(i > 0) {
+        code.push(["index[",pidx,"]-=s",pidx].join(""))
+      }
+      code.push(["++index[",idx,"]"].join(""))
+    }
+    code.push("}")
+  }
+  return code.join("\n")
+}
+
+function outerFill(matched, order, proc, body) {
+  var dimension = order.length
+    , nargs = proc.arrayArgs.length
+    , blockSize = proc.blockSize
+    , has_index = proc.indexArgs.length > 0
+    , code = []
+  for(var i=0; i<nargs; ++i) {
+    code.push(["var offset",i,"=p",i].join(""))
+  }
+  //Generate matched loops
+  for(var i=matched; i<dimension; ++i) {
+    code.push(["for(var j"+i+"=SS[", order[i], "]|0;j", i, ">0;){"].join(""))
+    code.push(["if(j",i,"<",blockSize,"){"].join(""))
+    code.push(["s",order[i],"=j",i].join(""))
+    code.push(["j",i,"=0"].join(""))
+    code.push(["}else{s",order[i],"=",blockSize].join(""))
+    code.push(["j",i,"-=",blockSize,"}"].join(""))
+    if(has_index) {
+      code.push(["index[",order[i],"]=j",i].join(""))
+    }
+  }
+  for(var i=0; i<nargs; ++i) {
+    var indexStr = ["offset"+i]
+    for(var j=matched; j<dimension; ++j) {
+      indexStr.push(["j",j,"*t",i,"[",order[j],"]"].join(""))
+    }
+    code.push(["p",i,"=(",indexStr.join("+"),")"].join(""))
+  }
+  code.push(innerFill(order, proc, body))
+  for(var i=matched; i<dimension; ++i) {
+    code.push("}")
+  }
+  return code.join("\n")
+}
+
+//Count the number of compatible inner orders
+function countMatches(orders) {
+  var matched = 0, dimension = orders[0].length
+  while(matched < dimension) {
+    for(var j=1; j<orders.length; ++j) {
+      if(orders[j][matched] !== orders[0][matched]) {
+        return matched
+      }
+    }
+    ++matched
+  }
+  return matched
+}
+
+//Processes a block according to the given data types
+function processBlock(block, proc, dtypes) {
+  var code = block.body
+  var pre = []
+  var post = []
+  for(var i=0; i<block.args.length; ++i) {
+    var carg = block.args[i]
+    if(carg.count <= 0) {
+      continue
+    }
+    var re = new RegExp(carg.name, "g")
+    var ptrStr = ""
+    var arrNum = proc.arrayArgs.indexOf(i)
+    switch(proc.argTypes[i]) {
+      case "offset":
+        var offArgIndex = proc.offsetArgIndex.indexOf(i)
+        var offArg = proc.offsetArgs[offArgIndex]
+        arrNum = offArg.array
+        ptrStr = "+q" + offArgIndex
+      case "array":
+        ptrStr = "p" + arrNum + ptrStr
+        var localStr = "l" + i
+        var arrStr = "a" + arrNum
+        if(carg.count === 1) {
+          if(dtypes[arrNum] === "generic") {
+            if(carg.lvalue) {
+              pre.push(["var ", localStr, "=", arrStr, ".get(", ptrStr, ")"].join(""))
+              code = code.replace(re, localStr)
+              post.push([arrStr, ".set(", ptrStr, ",", localStr,")"].join(""))
+            } else {
+              code = code.replace(re, [arrStr, ".get(", ptrStr, ")"].join(""))
+            }
+          } else {
+            code = code.replace(re, [arrStr, "[", ptrStr, "]"].join(""))
+          }
+        } else if(dtypes[arrNum] === "generic") {
+          pre.push(["var ", localStr, "=", arrStr, ".get(", ptrStr, ")"].join(""))
+          code = code.replace(re, localStr)
+          if(carg.lvalue) {
+            post.push([arrStr, ".set(", ptrStr, ",", localStr,")"].join(""))
+          }
+        } else {
+          pre.push(["var ", localStr, "=", arrStr, "[", ptrStr, "]"].join(""))
+          code = code.replace(re, localStr)
+          if(carg.lvalue) {
+            post.push([arrStr, "[", ptrStr, "]=", localStr].join(""))
+          }
+        }
+      break
+      case "scalar":
+        code = code.replace(re, "Y" + proc.scalarArgs.indexOf(i))
+      break
+      case "index":
+        code = code.replace(re, "index")
+      break
+      case "shape":
+        code = code.replace(re, "shape")
+      break
+    }
+  }
+  return [pre.join("\n"), code, post.join("\n")].join("\n").trim()
+}
+
+function typeSummary(dtypes) {
+  var summary = new Array(dtypes.length)
+  var allEqual = true
+  for(var i=0; i<dtypes.length; ++i) {
+    var t = dtypes[i]
+    var digits = t.match(/\d+/)
+    if(!digits) {
+      digits = ""
+    } else {
+      digits = digits[0]
+    }
+    if(t.charAt(0) === 0) {
+      summary[i] = "u" + t.charAt(1) + digits
+    } else {
+      summary[i] = t.charAt(0) + digits
+    }
+    if(i > 0) {
+      allEqual = allEqual && summary[i] === summary[i-1]
+    }
+  }
+  if(allEqual) {
+    return summary[0]
+  }
+  return summary.join("")
+}
+
+//Generates a cwise operator
+function generateCWiseOp(proc, typesig) {
+
+  //Compute dimension
+  var dimension = typesig[1].length|0
+  var orders = new Array(proc.arrayArgs.length)
+  var dtypes = new Array(proc.arrayArgs.length)
+
+  //First create arguments for procedure
+  var arglist = ["SS"]
+  var code = ["'use strict'"]
+  var vars = []
+  
+  for(var j=0; j<dimension; ++j) {
+    vars.push(["s", j, "=SS[", j, "]"].join(""))
+  }
+  for(var i=0; i<proc.arrayArgs.length; ++i) {
+    arglist.push("a"+i)
+    arglist.push("t"+i)
+    arglist.push("p"+i)
+    dtypes[i] = typesig[2*i]
+    orders[i] = typesig[2*i+1]
+  }
+  for(var i=0; i<proc.scalarArgs.length; ++i) {
+    arglist.push("Y" + i)
+  }
+  if(proc.shapeArgs.length > 0) {
+    vars.push("shape=SS.slice(0)")
+  }
+  if(proc.indexArgs.length > 0) {
+    var zeros = new Array(dimension)
+    for(var i=0; i<dimension; ++i) {
+      zeros[i] = "0"
+    }
+    vars.push(["index=[", zeros.join(","), "]"].join(""))
+  }
+  for(var i=0; i<proc.offsetArgs.length; ++i) {
+    var off_arg = proc.offsetArgs[i]
+    var init_string = []
+    for(var j=0; j<off_arg.offset.length; ++j) {
+      if(off_arg.offset[j] === 0) {
+        continue
+      } else if(off_arg.offset[j] === 1) {
+        init_string.push(["t", off_arg.array, "[", j, "]"].join(""))      
+      } else {
+        init_string.push([off_arg.offset[j], "*t", off_arg.array, "[", j, "]"].join(""))
+      }
+    }
+    if(init_string.length === 0) {
+      vars.push("q" + i + "=0")
+    } else {
+      vars.push(["q", i, "=(", init_string.join("+"),")|0"].join(""))
+    }
+  }
+
+  //Prepare this variables
+  var thisVars = uniq([].concat(proc.pre.thisVars)
+                      .concat(proc.body.thisVars)
+                      .concat(proc.post.thisVars))
+  vars = vars.concat(thisVars)
+  code.push("var " + vars.join(","))
+  for(var i=0; i<proc.arrayArgs.length; ++i) {
+    code.push("p"+i+"|=0")
+  }
+  
+  //Inline prelude
+  if(proc.pre.body.length > 3) {
+    code.push(processBlock(proc.pre, proc, dtypes))
+  }
+
+  //Process body
+  var body = processBlock(proc.body, proc, dtypes)
+  var matched = countMatches(orders)
+  if(matched < dimension) {
+    code.push(outerFill(matched, orders[0], proc, body))
+  } else {
+    code.push(innerFill(orders[0], proc, body))
+  }
+
+  //Inline epilog
+  if(proc.post.body.length > 3) {
+    code.push(processBlock(proc.post, proc, dtypes))
+  }
+  
+  if(proc.debug) {
+    console.log("Generated cwise routine for ", typesig, ":\n\n", code.join("\n"))
+  }
+  
+  var loopName = [(proc.funcName||"unnamed"), "_cwise_loop_", orders[0].join("s"),"m",matched,typeSummary(dtypes)].join("")
+  var f = new Function(["function ",loopName,"(", arglist.join(","),"){", code.join("\n"),"} return ", loopName].join(""))
+  return f()
+}
+module.exports = generateCWiseOp
+},{"uniq":18}],17:[function(require,module,exports){
+arguments[4][11][0].apply(exports,arguments)
+},{"./compile.js":16}],18:[function(require,module,exports){
+"use strict"
+
+function unique_pred(list, compare) {
+  var ptr = 1
+    , len = list.length
+    , a=list[0], b=list[0]
+  for(var i=1; i<len; ++i) {
+    b = a
+    a = list[i]
+    if(compare(a, b)) {
+      if(i === ptr) {
+        ptr++
+        continue
+      }
+      list[ptr++] = a
+    }
+  }
+  list.length = ptr
+  return list
+}
+
+function unique_eq(list) {
+  var ptr = 1
+    , len = list.length
+    , a=list[0], b = list[0]
+  for(var i=1; i<len; ++i, b=a) {
+    b = a
+    a = list[i]
+    if(a !== b) {
+      if(i === ptr) {
+        ptr++
+        continue
+      }
+      list[ptr++] = a
+    }
+  }
+  list.length = ptr
+  return list
+}
+
+function unique(list, compare, sorted) {
+  if(list.length === 0) {
+    return []
+  }
+  if(compare) {
+    if(!sorted) {
+      list.sort(compare)
+    }
+    return unique_pred(list, compare)
+  }
+  if(!sorted) {
+    list.sort()
+  }
+  return unique_eq(list)
+}
+
+module.exports = unique
+},{}],19:[function(require,module,exports){
+"use strict"
+
+var ndarray = require("ndarray")
+var ops = require("ndarray-ops")
+var pool = require("typedarray-pool")
+
+function clone(array) {
+  var dtype = array.dtype
+  if(dtype === "generic" || dtype === "array") {
+    dtype = "double"
+  }
+  var data = pool.malloc(array.size, dtype)
+  var result = ndarray(data, array.shape)
+  ops.assign(result, array)
+  return result
+}
+exports.clone = clone
+
+function malloc(shape, dtype) {
+  if(!dtype) {
+    dtype = "double"
+  }
+  var sz = 1
+  var stride = new Array(shape.length)
+  for(var i=shape.length-1; i>=0; --i) {
+    stride[i] = sz
+    sz *= shape[i]
+  }
+  return ndarray(pool.malloc(sz, dtype), shape, stride, 0)
+}
+exports.malloc = malloc
+
+function free(array) {
+  if(array.dtype === "generic" || array.dtype === "array") {
+    return
+  }
+  pool.free(array.data)
+}
+exports.free = free
+
+function zeros(shape, dtype) {
+  if(!dtype) {
+    dtype = "double"
+  }
+
+  var sz = 1
+  var stride = new Array(shape.length)
+  for(var i=shape.length-1; i>=0; --i) {
+    stride[i] = sz
+    sz *= shape[i]
+  }
+  var buf = pool.malloc(sz, dtype)
+  for(var i=0; i<sz; ++i) {
+    buf[i] = 0
+  }
+  return ndarray(buf, shape, stride, 0)
+}
+exports.zeros = zeros
+},{"ndarray":21,"ndarray-ops":8,"typedarray-pool":24}],20:[function(require,module,exports){
+"use strict"
+
+module.exports = ndSelect
+module.exports.compile = lookupCache
+
+//Macros
+var ARRAY = "a"
+var RANK = "K"
+var CMP = "C"
+var DATA = "d"
+var OFFSET = "o"
+var RND = "R"
+var TMP = "T"
+var LO = "L"
+var HI = "H"
+var PIVOT = "X"
+function SHAPE(i) {
+  return "s" + i
+}
+function STRIDE(i) {
+  return "t" + i
+}
+function STEP(i) {
+  return "u" + i
+}
+function STEP_CMP(i) {
+  return "v" + i
+}
+function INDEX(i) {
+  return "i" + i
+}
+function PICK(i) {
+  return "p" + i
+}
+function PTR(i) {
+  return "x" + i
+}
+
+//Create new order where index 0 is slowest index
+function permuteOrder(order) {
+  var norder = order.slice()
+  norder.splice(order.indexOf(0), 1)
+  norder.unshift(0)
+  return norder
+}
+
+//Generate quick select procedure
+function compileQuickSelect(order, useCompare, dtype) {
+  order = permuteOrder(order)
+
+  var dimension = order.length
+  var useGetter = (dtype === "generic")
+  var funcName = "ndSelect" + dtype + order.join("_") + "_" + (useCompare ? "cmp" : "lex")
+
+  var code = []
+
+  //Get arguments for code
+  var args = [ARRAY, RANK]
+  if(useCompare) {
+    args.push(CMP)
+  }
+
+  //Unpack ndarray variables
+  var vars = [
+    DATA + "=" + ARRAY + ".data",
+    OFFSET + "=" + ARRAY + ".offset|0",
+    RND + "=Math.random",
+    TMP]
+  for(var i=0; i<2; ++i) {
+    vars.push(PTR(i) + "=0")
+  }
+  for(var i=0; i<dimension; ++i) {
+    vars.push(
+      SHAPE(i) + "=" + ARRAY + ".shape[" + i + "]|0",
+      STRIDE(i) + "=" + ARRAY + ".stride[" + i + "]|0",
+      INDEX(i) + "=0")
+  }
+  for(var i=1; i<dimension; ++i) {
+    if(i < dimension-1) {
+      vars.push(STEP_CMP(i) + "=(" + STRIDE(i) + "-" + SHAPE(i+1) + "*" + STRIDE(i+1) + ")|0",
+                STEP(order[i]) + "=(" + STRIDE(order[i]) + "-" + SHAPE(order[i+1]) + "*" + STRIDE(order[i+1]) + ")|0")
+    } else {
+      vars.push(STEP_CMP(i) + "=" + STRIDE(i),
+                STEP(order[i]) + "=" + STRIDE(order[i]))
+    }
+  }
+  if(useCompare) {
+    for(var i=0; i<2; ++i) {
+      vars.push(PICK(i) + "=" + ARRAY + ".pick(0)")
+    }
+  }
+  vars.push(
+    PIVOT + "=0",
+    LO + "=0",
+    HI + "=" + SHAPE(order[0]) + "-1")
+
+  function compare(out, i0, i1) {
+    if(useCompare) {
+      code.push(
+        PICK(0), ".offset=", OFFSET, "+", STRIDE(order[0]), "*(", i0, ");",
+        PICK(1), ".offset=", OFFSET, "+", STRIDE(order[0]), "*(", i1, ");",
+        out, "=", CMP, "(", PICK(0), ",", PICK(1), ");")
+    } else {
+      code.push(
+        PTR(0), "=", OFFSET, "+", STRIDE(0), "*(", i0, ");",
+        PTR(1), "=", OFFSET, "+", STRIDE(0), "*(", i1, ");")
+      if(dimension > 1) {
+        code.push("_cmp:")
+      }
+      for(var i=dimension-1; i>0; --i) {
+        code.push("for(", INDEX(i), "=0;", 
+          INDEX(i), "<", SHAPE(i), ";",
+          INDEX(i), "++){")
+      }
+      if(useGetter) {
+        code.push(out, "=", DATA, ".get(", PTR(0), ")-", 
+                            DATA, ".get(", PTR(1), ");")
+      } else {
+        code.push(out, "=", DATA, "[", PTR(0), "]-", 
+                            DATA, "[", PTR(1), "];")
+      }
+      if(dimension > 1) {
+        code.push("if(", out, ")break _cmp;")
+      }
+      for(var i=1; i<dimension; ++i) {
+        code.push(
+          PTR(0), "+=", STEP_CMP(i), ";",
+          PTR(1), "+=", STEP_CMP(i),
+          "}")
+      }
+    }
+  }
+
+  function swap(i0, i1) {
+    code.push(
+      PTR(0), "=", OFFSET, "+", STRIDE(order[0]), "*(", i0, ");",
+      PTR(1), "=", OFFSET, "+", STRIDE(order[0]), "*(", i1, ");")
+    for(var i=dimension-1; i>0; --i) {
+      code.push("for(", INDEX(order[i]), "=0;", 
+        INDEX(order[i]), "<", SHAPE(order[i]), ";",
+        INDEX(order[i]), "++){")
+    }
+    if(useGetter) {
+      code.push(TMP, "=", DATA, ".get(", PTR(0), ");", 
+                DATA, ".set(", PTR(0), ",", DATA, ".get(", PTR(1), "));",
+                DATA, ".set(", PTR(1), ",", TMP, ");")
+    } else {
+      code.push(TMP, "=", DATA, "[", PTR(0), "];", 
+                DATA, "[", PTR(0), "]=", DATA, "[", PTR(1), "];",
+                DATA, "[", PTR(1), "]=", TMP, ";")
+    }
+    for(var i=1; i<dimension; ++i) {
+      code.push(
+        PTR(0), "+=", STEP(order[i]), ";",
+        PTR(1), "+=", STEP(order[i]),
+        "}")
+    }
+  }
+
+  code.push(
+    "while(", LO, "<", HI, "){",
+      PIVOT, "=(", RND, "()*(", HI, "-", LO, "+1)+", LO, ")|0;")
+
+  //Partition array by pivot
+  swap(PIVOT, HI)
+
+  code.push(
+    PIVOT, "=", LO, ";",
+    "for(", INDEX(0), "=", LO, ";",
+      INDEX(0), "<", HI, ";",
+      INDEX(0), "++){")
+  compare(TMP, INDEX(0), HI)
+  code.push("if(", TMP, "<0){")
+    swap(PIVOT, INDEX(0))
+    code.push(PIVOT, "++;")
+  code.push("}}")
+  swap(PIVOT, HI)
+
+  //Check pivot bounds
+  code.push(
+    "if(", PIVOT, "===", RANK, "){",
+      LO, "=", PIVOT, ";",
+      "break;",
+    "}else if(", RANK, "<", PIVOT, "){",
+      HI, "=", PIVOT, "-1;",
+    "}else{",
+      LO, "=", PIVOT, "+1;",
+    "}",
+  "}")
+
+  if(useCompare) {
+    code.push(PICK(0), ".offset=", OFFSET, "+", LO, "*", STRIDE(0), ";",
+      "return ", PICK(0), ";")
+  } else {
+    code.push("return ", ARRAY, ".pick(", LO, ");")
+  }
+
+  //Compile and link js together
+  var procCode = [
+    "'use strict';function ", funcName, "(", args, "){",
+      "var ", vars.join(), ";",
+      code.join(""),
+    "};return ", funcName
+  ].join("")
+
+  var proc = new Function(procCode)
+  return proc()
+}
+
+var CACHE = {}
+
+function lookupCache(order, useCompare, dtype) {
+  var typesig = order.join() + useCompare + dtype
+  var proc = CACHE[typesig]
+  if(proc) {
+    return proc
+  }
+  return CACHE[typesig] = compileQuickSelect(order, useCompare, dtype)
+}
+
+function ndSelect(array, k, compare) {
+  k |= 0
+  if((array.dimension === 0) || 
+    (array.shape[0] <= k) ||
+    (k < 0)) {
+    return null
+  }
+  var useCompare = !!compare
+  var proc = lookupCache(array.order, useCompare, array.dtype)
+  if(useCompare) {
+    return proc(array, k, compare)
+  } else {
+    return proc(array, k)
+  }
+}
+},{}],21:[function(require,module,exports){
+(function (Buffer){
+var iota = require("iota-array")
+
+var arrayMethods = [
+  "concat",
+  "join",
+  "slice",
+  "toString",
+  "indexOf",
+  "lastIndexOf",
+  "forEach",
+  "every",
+  "some",
+  "filter",
+  "map",
+  "reduce",
+  "reduceRight"
+]
+
+var hasTypedArrays  = ((typeof Float64Array) !== "undefined")
+var hasBuffer       = ((typeof Buffer) !== "undefined")
+
+function compare1st(a, b) {
+  return a[0] - b[0]
+}
+
+function order() {
+  var stride = this.stride
+  var terms = new Array(stride.length)
+  var i
+  for(i=0; i<terms.length; ++i) {
+    terms[i] = [Math.abs(stride[i]), i]
+  }
+  terms.sort(compare1st)
+  var result = new Array(terms.length)
+  for(i=0; i<result.length; ++i) {
+    result[i] = terms[i][1]
+  }
+  return result
+}
+
+function compileConstructor(dtype, dimension) {
+  var className = ["View", dimension, "d", dtype].join("")
+  if(dimension < 0) {
+    className = "View_Nil" + dtype
+  }
+  var useGetters = (dtype === "generic")
+  
+  if(dimension === -1) {
+    //Special case for trivial arrays
+    var code = 
+      "function "+className+"(a){this.data=a;};\
+var proto="+className+".prototype;\
+proto.dtype='"+dtype+"';\
+proto.index=function(){return -1};\
+proto.size=0;\
+proto.dimension=-1;\
+proto.shape=proto.stride=proto.order=[];\
+proto.lo=proto.hi=proto.transpose=proto.step=\
+function(){return new "+className+"(this.data);};\
+proto.get=proto.set=function(){};\
+proto.pick=function(){return null};\
+return function construct_"+className+"(a){return new "+className+"(a);}"
+    var procedure = new Function(code)
+    return procedure()
+  } else if(dimension === 0) {
+    //Special case for 0d arrays
+    var code =
+      "function "+className+"(a,d) {\
+this.data = a;\
+this.offset = d\
+};\
+var proto="+className+".prototype;\
+proto.dtype='"+dtype+"';\
+proto.index=function(){return this.offset};\
+proto.dimension=0;\
+proto.size=1;\
+proto.shape=\
+proto.stride=\
+proto.order=[];\
+proto.lo=\
+proto.hi=\
+proto.transpose=\
+proto.step=function "+className+"_copy() {\
+return new "+className+"(this.data,this.offset)\
+};\
+proto.pick=function "+className+"_pick(){\
+return TrivialArray(this.data);\
+};\
+proto.valueOf=proto.get=function "+className+"_get(){\
+return "+(useGetters ? "this.data.get(this.offset)" : "this.data[this.offset]")+
+"};\
+proto.set=function "+className+"_set(v){\
+return "+(useGetters ? "this.data.set(this.offset,v)" : "this.data[this.offset]=v")+"\
+};\
+return function construct_"+className+"(a,b,c,d){return new "+className+"(a,d)}"
+    var procedure = new Function("TrivialArray", code)
+    return procedure(CACHED_CONSTRUCTORS[dtype][0])
+  }
+
+  var code = ["'use strict'"]
+    
+  //Create constructor for view
+  var indices = iota(dimension)
+  var args = indices.map(function(i) { return "i"+i })
+  var index_str = "this.offset+" + indices.map(function(i) {
+        return "this._stride" + i + "*i" + i
+      }).join("+")
+  code.push("function "+className+"(a,"+
+    indices.map(function(i) {
+      return "b"+i
+    }).join(",") + "," +
+    indices.map(function(i) {
+      return "c"+i
+    }).join(",") + ",d){this.data=a")
+  for(var i=0; i<dimension; ++i) {
+    code.push("this._shape"+i+"=b"+i+"|0")
+  }
+  for(var i=0; i<dimension; ++i) {
+    code.push("this._stride"+i+"=c"+i+"|0")
+  }
+  code.push("this.offset=d|0}",
+    "var proto="+className+".prototype",
+    "proto.dtype='"+dtype+"'",
+    "proto.dimension="+dimension)
+  
+  //view.stride and view.shape
+  var strideClassName = "VStride" + dimension + "d" + dtype
+  var shapeClassName = "VShape" + dimension + "d" + dtype
+  var props = {"stride":strideClassName, "shape":shapeClassName}
+  for(var prop in props) {
+    var arrayName = props[prop]
+    code.push(
+      "function " + arrayName + "(v) {this._v=v} var aproto=" + arrayName + ".prototype",
+      "aproto.length="+dimension)
+    
+    var array_elements = []
+    for(var i=0; i<dimension; ++i) {
+      array_elements.push(["this._v._", prop, i].join(""))
+    }
+    code.push(
+      "aproto.toJSON=function " + arrayName + "_toJSON(){return [" + array_elements.join(",") + "]}",
+      "aproto.valueOf=aproto.toString=function " + arrayName + "_toString(){return [" + array_elements.join(",") + "].join()}")
+    
+    for(var i=0; i<dimension; ++i) {
+      code.push("Object.defineProperty(aproto,"+i+",{get:function(){return this._v._"+prop+i+"},set:function(v){return this._v._"+prop+i+"=v|0},enumerable:true})")
+    }
+    for(var i=0; i<arrayMethods.length; ++i) {
+      if(arrayMethods[i] in Array.prototype) {
+        code.push("aproto."+arrayMethods[i]+"=Array.prototype."+arrayMethods[i])
+      }
+    }
+    code.push(["Object.defineProperty(proto,'",prop,"',{get:function ", arrayName, "_get(){return new ", arrayName, "(this)},set: function ", arrayName, "_set(v){"].join(""))
+    for(var i=0; i<dimension; ++i) {
+      code.push("this._"+prop+i+"=v["+i+"]|0")
+    }
+    code.push("return v}})")
+  }
+  
+  //view.size:
+  code.push("Object.defineProperty(proto,'size',{get:function "+className+"_size(){\
+return "+indices.map(function(i) { return "this._shape"+i }).join("*"),
+"}})")
+
+  //view.order:
+  if(dimension === 1) {
+    code.push("proto.order=[0]")
+  } else {
+    code.push("Object.defineProperty(proto,'order',{get:")
+    if(dimension < 4) {
+      code.push("function "+className+"_order(){")
+      if(dimension === 2) {
+        code.push("return (Math.abs(this._stride0)>Math.abs(this._stride1))?[1,0]:[0,1]}})")
+      } else if(dimension === 3) {
+        code.push(
+"var s0=Math.abs(this._stride0),s1=Math.abs(this._stride1),s2=Math.abs(this._stride2);\
+if(s0>s1){\
+if(s1>s2){\
+return [2,1,0];\
+}else if(s0>s2){\
+return [1,2,0];\
+}else{\
+return [1,0,2];\
+}\
+}else if(s0>s2){\
+return [2,0,1];\
+}else if(s2>s1){\
+return [0,1,2];\
+}else{\
+return [0,2,1];\
+}}})")
+      }
+    } else {
+      code.push("ORDER})")
+    }
+  }
+  
+  //view.set(i0, ..., v):
+  code.push(
+"proto.set=function "+className+"_set("+args.join(",")+",v){")
+  if(useGetters) {
+    code.push("return this.data.set("+index_str+",v)}")
+  } else {
+    code.push("return this.data["+index_str+"]=v}")
+  }
+  
+  //view.get(i0, ...):
+  code.push("proto.get=function "+className+"_get("+args.join(",")+"){")
+  if(useGetters) {
+    code.push("return this.data.get("+index_str+")}")
+  } else {
+    code.push("return this.data["+index_str+"]}")
+  }
+  
+  //view.index:
+  code.push(
+    "proto.index=function "+className+"_index(", args.join(), "){return "+index_str+"}")
+
+  //view.hi():
+  code.push("proto.hi=function "+className+"_hi("+args.join(",")+"){return new "+className+"(this.data,"+
+    indices.map(function(i) {
+      return ["(typeof i",i,"!=='number'||i",i,"<0)?this._shape", i, ":i", i,"|0"].join("")
+    }).join(",")+","+
+    indices.map(function(i) {
+      return "this._stride"+i
+    }).join(",")+",this.offset)}")
+  
+  //view.lo():
+  var a_vars = indices.map(function(i) { return "a"+i+"=this._shape"+i })
+  var c_vars = indices.map(function(i) { return "c"+i+"=this._stride"+i })
+  code.push("proto.lo=function "+className+"_lo("+args.join(",")+"){var b=this.offset,d=0,"+a_vars.join(",")+","+c_vars.join(","))
+  for(var i=0; i<dimension; ++i) {
+    code.push(
+"if(typeof i"+i+"==='number'&&i"+i+">=0){\
+d=i"+i+"|0;\
+b+=c"+i+"*d;\
+a"+i+"-=d}")
+  }
+  code.push("return new "+className+"(this.data,"+
+    indices.map(function(i) {
+      return "a"+i
+    }).join(",")+","+
+    indices.map(function(i) {
+      return "c"+i
+    }).join(",")+",b)}")
+  
+  //view.step():
+  code.push("proto.step=function "+className+"_step("+args.join(",")+"){var "+
+    indices.map(function(i) {
+      return "a"+i+"=this._shape"+i
+    }).join(",")+","+
+    indices.map(function(i) {
+      return "b"+i+"=this._stride"+i
+    }).join(",")+",c=this.offset,d=0,ceil=Math.ceil")
+  for(var i=0; i<dimension; ++i) {
+    code.push(
+"if(typeof i"+i+"==='number'){\
+d=i"+i+"|0;\
+if(d<0){\
+c+=b"+i+"*(a"+i+"-1);\
+a"+i+"=ceil(-a"+i+"/d)\
+}else{\
+a"+i+"=ceil(a"+i+"/d)\
+}\
+b"+i+"*=d\
+}")
+  }
+  code.push("return new "+className+"(this.data,"+
+    indices.map(function(i) {
+      return "a" + i
+    }).join(",")+","+
+    indices.map(function(i) {
+      return "b" + i
+    }).join(",")+",c)}")
+  
+  //view.transpose():
+  var tShape = new Array(dimension)
+  var tStride = new Array(dimension)
+  for(var i=0; i<dimension; ++i) {
+    tShape[i] = "a[i"+i+"]"
+    tStride[i] = "b[i"+i+"]"
+  }
+  code.push("proto.transpose=function "+className+"_transpose("+args+"){"+
+    args.map(function(n,idx) { return n + "=(" + n + "===undefined?" + idx + ":" + n + "|0)"}).join(";"),
+    "var a=this.shape,b=this.stride;return new "+className+"(this.data,"+tShape.join(",")+","+tStride.join(",")+",this.offset)}")
+  
+  //view.pick():
+  code.push("proto.pick=function "+className+"_pick("+args+"){var a=[],b=[],c=this.offset")
+  for(var i=0; i<dimension; ++i) {
+    code.push("if(typeof i"+i+"==='number'&&i"+i+">=0){c=(c+this._stride"+i+"*i"+i+")|0}else{a.push(this._shape"+i+");b.push(this._stride"+i+")}")
+  }
+  code.push("var ctor=CTOR_LIST[a.length+1];return ctor(this.data,a,b,c)}")
+    
+  //Add return statement
+  code.push("return function construct_"+className+"(data,shape,stride,offset){return new "+className+"(data,"+
+    indices.map(function(i) {
+      return "shape["+i+"]"
+    }).join(",")+","+
+    indices.map(function(i) {
+      return "stride["+i+"]"
+    }).join(",")+",offset)}")
+
+  //Compile procedure
+  var procedure = new Function("CTOR_LIST", "ORDER", code.join("\n"))
+  return procedure(CACHED_CONSTRUCTORS[dtype], order)
+}
+
+function arrayDType(data) {
+  if(hasBuffer) {
+    if(Buffer.isBuffer(data)) {
+      return "buffer"
+    }
+  }
+  if(hasTypedArrays) {
+    switch(Object.prototype.toString.call(data)) {
+      case "[object Float64Array]":
+        return "float64"
+      case "[object Float32Array]":
+        return "float32"
+      case "[object Int8Array]":
+        return "int8"
+      case "[object Int16Array]":
+        return "int16"
+      case "[object Int32Array]":
+        return "int32"
+      case "[object Uint8Array]":
+        return "uint8"
+      case "[object Uint16Array]":
+        return "uint16"
+      case "[object Uint32Array]":
+        return "uint32"
+      case "[object Uint8ClampedArray]":
+        return "uint8_clamped"
+    }
+  }
+  if(Array.isArray(data)) {
+    return "array"
+  }
+  return "generic"
+}
+
+var CACHED_CONSTRUCTORS = {
+  "float32":[],
+  "float64":[],
+  "int8":[],
+  "int16":[],
+  "int32":[],
+  "uint8":[],
+  "uint16":[],
+  "uint32":[],
+  "array":[],
+  "uint8_clamped":[],
+  "buffer":[],
+  "generic":[]
+}
+
+;(function() {
+  for(var id in CACHED_CONSTRUCTORS) {
+    CACHED_CONSTRUCTORS[id].push(compileConstructor(id, -1))
+  }
+});
+
+function wrappedNDArrayCtor(data, shape, stride, offset) {
+  if(data === undefined) {
+    var ctor = CACHED_CONSTRUCTORS.array[0]
+    return ctor([])
+  } else if(typeof data === "number") {
+    data = [data]
+  }
+  if(shape === undefined) {
+    shape = [ data.length ]
+  }
+  var d = shape.length
+  if(stride === undefined) {
+    stride = new Array(d)
+    for(var i=d-1, sz=1; i>=0; --i) {
+      stride[i] = sz
+      sz *= shape[i]
+    }
+  }
+  if(offset === undefined) {
+    offset = 0
+    for(var i=0; i<d; ++i) {
+      if(stride[i] < 0) {
+        offset -= (shape[i]-1)*stride[i]
+      }
+    }
+  }
+  var dtype = arrayDType(data)
+  var ctor_list = CACHED_CONSTRUCTORS[dtype]
+  while(ctor_list.length <= d+1) {
+    ctor_list.push(compileConstructor(dtype, ctor_list.length-1))
+  }
+  var ctor = ctor_list[d+1]
+  return ctor(data, shape, stride, offset)
+}
+
+module.exports = wrappedNDArrayCtor
+}).call(this,require("buffer").Buffer)
+},{"buffer":1,"iota-array":22}],22:[function(require,module,exports){
+"use strict"
+
+function iota(n) {
+  var result = new Array(n)
+  for(var i=0; i<n; ++i) {
+    result[i] = i
+  }
+  return result
+}
+
+module.exports = iota
+},{}],23:[function(require,module,exports){
+"use strict"
+
+function dupe_array(count, value, i) {
+  var c = count[i]|0
+  if(c <= 0) {
+    return []
+  }
+  var result = new Array(c), j
+  if(i === count.length-1) {
+    for(j=0; j<c; ++j) {
+      result[j] = value
+    }
+  } else {
+    for(j=0; j<c; ++j) {
+      result[j] = dupe_array(count, value, i+1)
+    }
+  }
+  return result
+}
+
+function dupe_number(count, value) {
+  var result, i
+  result = new Array(count)
+  for(i=0; i<count; ++i) {
+    result[i] = value
+  }
+  return result
+}
+
+function dupe(count, value) {
+  if(typeof value === "undefined") {
+    value = 0
+  }
+  switch(typeof count) {
+    case "number":
+      if(count > 0) {
+        return dupe_number(count|0, value)
+      }
+    break
+    case "object":
+      if(typeof (count.length) === "number") {
+        return dupe_array(count, value, 0)
+      }
+    break
+  }
+  return []
+}
+
+module.exports = dupe
+},{}],24:[function(require,module,exports){
+(function (global,Buffer){
+var bits = require("bit-twiddle")
+var dup = require("dup")
+if(!global.__TYPEDARRAY_POOL) {
+  global.__TYPEDARRAY_POOL = {
+      UINT8   : dup([32, 0])
+    , UINT16  : dup([32, 0])
+    , UINT32  : dup([32, 0])
+    , INT8    : dup([32, 0])
+    , INT16   : dup([32, 0])
+    , INT32   : dup([32, 0])
+    , FLOAT   : dup([32, 0])
+    , DOUBLE  : dup([32, 0])
+    , DATA    : dup([32, 0])
+    , UINT8C  : dup([32, 0])
+    , BUFFER  : dup([32, 0])
+  }
+}
+var hasUint8C = (typeof Uint8ClampedArray) !== "undefined"
+var POOL = global.__TYPEDARRAY_POOL
+if(!POOL.UINT8C) {
+  POOL.UINT8C = dup([32, 0])
+}
+if(!POOL.BUFFER) {
+  POOL.BUFFER = dup([32, 0])
+}
+var UINT8   = POOL.UINT8
+  , UINT16  = POOL.UINT16
+  , UINT32  = POOL.UINT32
+  , INT8    = POOL.INT8
+  , INT16   = POOL.INT16
+  , INT32   = POOL.INT32
+  , FLOAT   = POOL.FLOAT
+  , DOUBLE  = POOL.DOUBLE
+  , DATA    = POOL.DATA
+  , UINT8C  = POOL.UINT8C
+  , BUFFER  = POOL.BUFFER
+
+exports.free = function free(array) {
+  var n = array.length|0
+    , log_n = bits.log2(n)
+  if(Buffer.isBuffer(array)) {
+    BUFFER[log_n].push(array)
+  } else {
+    switch(Object.prototype.toString.call(array)) {
+      case "[object Uint8Array]":
+        UINT8[log_n].push(array)
+      break
+      case "[object Uint16Array]":
+        UINT16[log_n].push(array)
+      break
+      case "[object Uint32Array]":
+        UINT32[log_n].push(array)
+      break
+      case "[object Int8Array]":
+        INT8[log_n].push(array)
+      break
+      case "[object Int16Array]":
+        INT16[log_n].push(array)
+      break
+      case "[object Int32Array]":
+        INT32[log_n].push(array)
+      break
+      case "[object Uint8ClampedArray]":
+        UINT8C[log_n].push(array)
+      break
+      case "[object Float32Array]":
+        FLOAT[log_n].push(array)
+      break
+      case "[object Float64Array]":
+        DOUBLE[log_n].push(array)
+      break
+      case "[object ArrayBuffer]":
+        DATA[log_n].push(array)
+      break
+      default:
+        throw new Error("typedarray-pool: Unspecified array type")
+    }
+  }
+}
+
+exports.freeUint8 = function freeUint8(array) {
+  UINT8[bits.log2(array.length)].push(array)
+}
+
+exports.freeUint16 = function freeUint16(array) {
+  UINT16[bits.log2(array.length)].push(array)
+}
+
+exports.freeUint32 = function freeUint32(array) {
+  UINT32[bits.log2(array.length)].push(array)
+}
+
+exports.freeInt8 = function freeInt8(array) {
+  INT8[bits.log2(array.length)].push(array)
+}
+
+exports.freeInt16 = function freeInt16(array) {
+  INT16[bits.log2(array.length)].push(array)
+}
+
+exports.freeInt32 = function freeInt32(array) {
+  INT32[bits.log2(array.length)].push(array)
+}
+
+exports.freeFloat32 = exports.freeFloat = function freeFloat(array) {
+  FLOAT[bits.log2(array.length)].push(array)
+}
+
+exports.freeFloat64 = exports.freeDouble = function freeDouble(array) {
+  DOUBLE[bits.log2(array.length)].push(array)
+}
+
+exports.freeArrayBuffer = function freeArrayBuffer(array) {
+  DATA[bits.log2(array.length)].push(array)
+}
+
+if(hasUint8C) {
+  exports.freeUint8Clamped = function freeUint8Clamped(array) {
+    UINT8C[bits.log2(array.length)].push(array)
+  }
+} else {
+  exports.freeUint8Clamped = exports.freeUint8
+}
+
+exports.freeBuffer = function freeBuffer(array) {
+  BUFFER[bits.log2(array.length)].push(array)
+}
+
+exports.malloc = function malloc(n, dtype) {
+  n = bits.nextPow2(n)
+  var log_n = bits.log2(n)
+  if(dtype === undefined || dtype === "arraybuffer") {
+    var d = DATA[log_n]
+    if(d.length > 0) {
+      var r = d[d.length-1]
+      d.pop()
+      return r
+    }
+    return new ArrayBuffer(n)
+  } else {
+    switch(dtype) {
+      case "uint8":
+        var u8 = UINT8[log_n]
+        if(u8.length > 0) {
+          return u8.pop()
+        }
+        return new Uint8Array(n)
+      break
+
+      case "uint16":
+        var u16 = UINT16[log_n]
+        if(u16.length > 0) {
+          return u16.pop()
+        }
+        return new Uint16Array(n)
+      break
+
+      case "uint32":
+        var u32 = UINT32[log_n]
+        if(u32.length > 0) {
+          return u32.pop()
+        }
+        return new Uint32Array(n)
+      break
+
+      case "int8":
+        var i8 = INT8[log_n]
+        if(i8.length > 0) {
+          return i8.pop()
+        }
+        return new Int8Array(n)
+      break
+
+      case "int16":
+        var i16 = INT16[log_n]
+        if(i16.length > 0) {
+          return i16.pop()
+        }
+        return new Int16Array(n)
+      break
+
+      case "int32":
+        var i32 = INT32[log_n]
+        if(i32.length > 0) {
+          return i32.pop()
+        }
+        return new Int32Array(n)
+      break
+
+      case "float":
+      case "float32":
+        var f = FLOAT[log_n]
+        if(f.length > 0) {
+          return f.pop()
+        }
+        return new Float32Array(n)
+      break
+
+      case "double":
+      case "float64":
+        var dd = DOUBLE[log_n]
+        if(dd.length > 0) {
+          return dd.pop()
+        }
+        return new Float64Array(n)
+      break
+
+      case "uint8_clamped":
+        if(hasUint8C) {
+          var u8c = UINT8C[log_n]
+          if(u8c.length > 0) {
+            return u8c.pop()
+          }
+          return new Uint8ClampedArray(n)
+        } else {
+          var u8 = UINT8[log_n]
+          if(u8.length > 0) {
+            return u8.pop()
+          }
+          return new Uint8Array(n)
+        }
+      break
+
+      case "buffer":
+        var buf = BUFFER[log_n]
+        if(buf.length > 0) {
+          return buf.pop()
+        }
+        return new Buffer(n)
+      break
+
+      default:
+        return null
+    }
+  }
+  return null
+}
+
+exports.mallocUint8 = function mallocUint8(n) {
+  n = bits.nextPow2(n)
+  var log_n = bits.log2(n)
+  var cache = UINT8[log_n]
+  if(cache.length > 0) {
+    return cache.pop()
+  }
+  return new Uint8Array(n)
+}
+
+exports.mallocUint16 = function mallocUint16(n) {
+  n = bits.nextPow2(n)
+  var log_n = bits.log2(n)
+  var cache = UINT16[log_n]
+  if(cache.length > 0) {
+    return cache.pop()
+  }
+  return new Uint16Array(n)
+}
+
+exports.mallocUint32 = function mallocUint32(n) {
+  n = bits.nextPow2(n)
+  var log_n = bits.log2(n)
+  var cache = UINT32[log_n]
+  if(cache.length > 0) {
+    return cache.pop()
+  }
+  return new Uint32Array(n)
+}
+
+exports.mallocInt8 = function mallocInt8(n) {
+  n = bits.nextPow2(n)
+  var log_n = bits.log2(n)
+  var cache = INT8[log_n]
+  if(cache.length > 0) {
+    return cache.pop()
+  }
+  return new Int8Array(n)
+}
+
+exports.mallocInt16 = function mallocInt16(n) {
+  n = bits.nextPow2(n)
+  var log_n = bits.log2(n)
+  var cache = INT16[log_n]
+  if(cache.length > 0) {
+    return cache.pop()
+  }
+  return new Int16Array(n)
+}
+
+exports.mallocInt32 = function mallocInt32(n) {
+  n = bits.nextPow2(n)
+  var log_n = bits.log2(n)
+  var cache = INT32[log_n]
+  if(cache.length > 0) {
+    return cache.pop()
+  }
+  return new Int32Array(n)
+}
+
+exports.mallocFloat32 = exports.mallocFloat = function mallocFloat(n) {
+  n = bits.nextPow2(n)
+  var log_n = bits.log2(n)
+  var cache = FLOAT[log_n]
+  if(cache.length > 0) {
+    return cache.pop()
+  }
+  return new Float32Array(n)
+}
+
+exports.mallocFloat64 = exports.mallocDouble = function mallocDouble(n) {
+  n = bits.nextPow2(n)
+  var log_n = bits.log2(n)
+  var cache = DOUBLE[log_n]
+  if(cache.length > 0) {
+    return cache.pop()
+  }
+  return new Float64Array(n)
+}
+
+exports.mallocArrayBuffer = function mallocArrayBuffer(n) {
+  n = bits.nextPow2(n)
+  var log_n = bits.log2(n)
+  var cache = DATA[log_n]
+  if(cache.length > 0) {
+    return cache.pop()
+  }
+  return new ArrayBuffer(n)
+}
+
+if(hasUint8C) {
+  exports.mallocUint8Clamped = function mallocUint8Clamped(n) {
+    n = bits.nextPow2(n)
+    var log_n = bits.log2(n)
+    var cache = UINT8C[log_n]
+    if(cache.length > 0) {
+      return cache.pop()
+    }
+    return new Uint8ClampedArray(n)
+  }
+} else {
+  exports.mallocUint8Clamped = exports.mallocUint8
+}
+
+exports.mallocBuffer = function mallocBuffer(n) {
+  n = bits.nextPow2(n)
+  var log_n = bits.log2(n)
+  var cache = BUFFER[log_n]
+  if(cache.length > 0) {
+    return cache.pop()
+  }
+  return new Buffer(n)
+}
+
+exports.clearCache = function clearCache() {
+  for(var i=0; i<32; ++i) {
+    UINT8[i].length = 0
+    UINT16[i].length = 0
+    UINT32[i].length = 0
+    INT8[i].length = 0
+    INT16[i].length = 0
+    INT32[i].length = 0
+    FLOAT[i].length = 0
+    DOUBLE[i].length = 0
+    DATA[i].length = 0
+    UINT8C[i].length = 0
+    BUFFER[i].length = 0
+  }
+}
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {},require("buffer").Buffer)
+},{"bit-twiddle":5,"buffer":1,"dup":23}],"static-kdtree":[function(require,module,exports){
+"use strict"
+
+module.exports = createKDTree
+module.exports.deserialize = deserializeKDTree
+
+var ndarray = require("ndarray")
+var ndselect = require("ndarray-select")
+var pack = require("ndarray-pack")
+var ops = require("ndarray-ops")
+var ndscratch = require("ndarray-scratch")
+var pool = require("typedarray-pool")
+var inorderTree = require("inorder-tree-layout")
+var bits = require("bit-twiddle")
+var KDTHeap = require("./lib/heap.js")
+
+function KDTree(points, ids, n, d) {
+  this.points = points
+  this.ids = ids
+  this.dimension = d
+  this.length = n
+}
+
+var proto = KDTree.prototype
+
+proto.serialize = function() {
+  if(this.length > 0) {
+    return {
+      p: Array.prototype.slice.call(this.points.data, 0, this.length*this.dimension),
+      i: Array.prototype.slice.call(this.ids, 0, this.length)
+    }
+  } else {
+    return { d: this.dimension }
+  }
+}
+
+//Range query
+proto.range = function kdtRangeQuery(lo, hi, visit) {
+  var n = this.length
+  if(n < 1) {
+    return
+  }
+
+  //Check degenerate case
+  var d = this.dimension
+  for(var i=0; i<d; ++i) {
+    if(hi[i] < lo[i]) {
+      return
+    }
+  }
+
+  var points = this.points
+  var ids = this.ids
+
+  //Walk tree in level order, skipping subtrees which do not intersect range
+  var visitRange = ndscratch.malloc([n, 2, d])
+  var visitIndex = pool.mallocInt32(n)
+  var rangeData = visitRange.data
+  var pointData = points.data
+  var visitCount = 1
+  var visitTop = 0
+  var retval
+
+  visitIndex[0] = 0
+  pack(lo, visitRange.pick(0,0))
+  pack(hi, visitRange.pick(0,1))
+  
+  while(visitTop < visitCount) {
+    var idx = visitIndex[visitTop]
+    var k = bits.log2(idx+1)%d
+    var loidx = visitRange.index(visitTop, 0, 0)
+    var hiidx = visitRange.index(visitTop, 1, 0)
+    var pidx = points.index(idx, 0)
+
+    var visitPoint = true
+    for(var i=0; i<d; ++i) {
+      var pc = pointData[pidx+i]
+      if((pc < rangeData[loidx + i]) || 
+         (rangeData[hiidx + i] < pc)) {
+        visitPoint = false
+        break
+      }
+    }
+    if(visitPoint) {
+      retval = visit(ids[idx])
+      if(retval !== undefined) {
+        break
+      }
+    }
+
+    //Visit children
+    var pk = pointData[pidx+k]
+    var hk = rangeData[hiidx+k]
+    var lk = rangeData[loidx+k]
+    if(lk <= pk) {
+      var left = 2 * idx + 1
+      if(left < n) {
+        visitIndex[visitCount] = left
+        var y = visitRange.index(visitCount, 0, 0)
+        for(var i=0; i<d; ++i) {
+          rangeData[y+i] = rangeData[loidx+i]
+        }
+        var z = visitRange.index(visitCount, 1, 0)
+        for(var i=0; i<d; ++i) {
+          rangeData[z+i] = rangeData[hiidx+i]
+        }
+        rangeData[z+k] = Math.min(hk, pk)
+        visitCount += 1
+      }
+    }
+    if(pk <= hk) {
+      var right = 2 * (idx + 1)
+      if(right < n) {
+        visitIndex[visitCount] = right
+        var y = visitRange.index(visitCount, 0, 0)
+        for(var i=0; i<d; ++i) {
+          rangeData[y+i] = rangeData[loidx+i]
+        }
+        var z = visitRange.index(visitCount, 1, 0)
+        for(var i=0; i<d; ++i) {
+          rangeData[z+i] = rangeData[hiidx+i]
+        }
+        rangeData[y+k] = Math.max(lk, pk)
+        visitCount += 1
+      }
+    }
+
+    //Increment pointer
+    visitTop += 1
+  }
+  ndscratch.free(visitRange)
+  pool.free(visitIndex)
+  return retval
+}
+
+proto.rnn = function(point, radius, visit) {
+  if(radius < 0) {
+    return
+  }
+  var n = this.length
+  if(n < 1) {
+    return
+  }
+  var d = this.dimension
+  var points = this.points
+  var ids = this.ids
+
+  //Walk tree in level order, skipping subtrees which do not intersect sphere
+  var visitDistance = ndscratch.malloc([n, d])
+  var visitIndex = pool.mallocInt32(n)
+  var distanceData = visitDistance.data
+  var pointData = points.data
+  var visitCount = 1
+  var visitTop = 0
+  var r2 = radius*radius
+  var retval
+
+  //Initialize top of queue
+  visitIndex[0] = 0
+  for(var i=0; i<d; ++i) {
+    visitDistance.set(0, i, 0)
+  }
+
+  //Walk over queue
+  while(visitTop < visitCount) {
+    var idx = visitIndex[visitTop]
+    var pidx = points.index(idx, 0)
+
+    //Check if point in sphere
+    var d2 = 0.0
+    for(var i=0; i<d; ++i) {
+      d2 += Math.pow(point[i] - pointData[pidx+i], 2)
+    }
+    if(d2 <= r2) {
+      retval = visit(ids[idx])
+      if(retval !== undefined) {
+        break
+      }
+    }
+
+    //Visit children
+    var k = bits.log2(idx+1)%d
+    var ds = 0.0
+    var didx = visitDistance.index(visitTop, 0)
+    for(var i=0; i<d; ++i) {
+      if(i !== k) {
+        ds += distanceData[didx + i]
+      }
+    }
+
+    //Handle split axis
+    var qk = point[k]
+    var pk = pointData[pidx+k]
+    var dk = distanceData[didx+k]
+    var lk = dk
+    var hk = dk
+    if(qk < pk) {
+      hk = Math.max(dk, Math.pow(pk - qk, 2))
+    } else {
+      lk = Math.max(dk, Math.pow(pk - qk, 2))
+    }
+
+    var d2l = lk + ds
+    var d2h = hk + ds
+
+    if(d2l <= r2) {
+      var left = 2 * idx + 1
+      if(left < n) {
+        visitIndex[visitCount] = left
+        var y = visitDistance.index(visitCount, 0)
+        for(var i=0; i<d; ++i) {
+          distanceData[y+i] = distanceData[didx+i]
+        }
+        distanceData[y+k] = lk
+        visitCount += 1
+      }
+    }
+    if(d2h <= r2) {
+      var right = 2 * (idx + 1)
+      if(right < n) {
+        visitIndex[visitCount] = right
+        var y = visitDistance.index(visitCount, 0)
+        for(var i=0; i<d; ++i) {
+          distanceData[y+i] = distanceData[didx+i]
+        }
+        distanceData[y+k] = hk
+        visitCount += 1
+      }
+    }
+
+    //Increment pointer
+    visitTop += 1
+  }
+
+  ndscratch.free(visitDistance)
+  pool.free(visitIndex)
+  return retval
+}
+
+proto.nn = function(point, maxDistance) {
+  var n = this.length
+  if(n < 1) {
+    return -1
+  }
+  if(typeof maxDistance === "number") {
+    if(maxDistance < 0) {
+      return -1
+    } 
+  } else {
+    maxDistance = Infinity
+  }
+  var d = this.dimension
+  var points = this.points
+  var pointData = points.data
+  var dataVector = pool.mallocFloat64(d)
+
+  var toVisit = new KDTHeap(n, d+1)
+  var index = toVisit.index
+  var data = toVisit.data
+  index[0] = 0
+  for(var i=0; i<=d; ++i) {
+    data[i] = 0
+  }
+  toVisit.count += 1
+
+  var nearest = -1
+  var nearestD = maxDistance
+
+  while(toVisit.count > 0) {
+    if(data[0] >= nearestD) {
+      break
+    }
+
+    var idx = index[0]
+    var pidx = points.index(idx, 0)
+    var d2 = 0.0
+    for(var i=0; i<d; ++i) {
+      d2 += Math.pow(point[i]-pointData[pidx+i], 2)
+    }
+    if(d2 < nearestD) {
+      nearestD = d2
+      nearest = idx
+    }
+
+    //Compute distance bounds for children
+    var k = bits.log2(idx+1)%d
+    var ds = 0
+    for(var i=0; i<d; ++i) {
+      var dd = data[i+1]
+      if(i !== k) {
+        ds += dd
+      }
+      dataVector[i] = dd
+    }
+    var qk = point[k]
+    var pk = pointData[pidx+k]
+    var dk = dataVector[k]
+    var lk = dk
+    var hk = dk
+    if(qk < pk) {
+      hk = Math.max(dk, Math.pow(pk - qk, 2))
+    } else {
+      lk = Math.max(dk, Math.pow(pk - qk, 2))
+    }
+    var d2l = lk + ds
+    var d2h = hk + ds
+
+    toVisit.pop()
+    
+    if(d2l < nearestD) {
+      var left = 2 * idx + 1
+      if(left < n) {
+        var vcount = toVisit.count
+        index[vcount] = left
+        var vptr = vcount * (d+1)
+        data[vptr] = d2l
+        for(var i=1; i<=d; ++i) {
+          data[vptr+i] = dataVector[i-1]
+        }
+        data[vptr+k+1] = lk
+        toVisit.push()
+      }
+    }
+    if(d2h < nearestD) {
+      var right = 2 * (idx + 1)
+      if(right < n) {
+        var vcount = toVisit.count
+        index[vcount] = right
+        var vptr = vcount * (d+1)
+        data[vptr] = d2h
+        for(var i=1; i<=d; ++i) {
+          data[vptr+i] = dataVector[i-1]
+        }
+        data[vptr+k+1] = hk
+        toVisit.push()
+      }
+    }
+  }
+
+  pool.freeFloat64(dataVector)
+  toVisit.dispose()
+  
+  if(nearest < 0) {
+    return -1
+  }
+  return this.ids[nearest]
+}
+
+proto.knn = function(point, maxPoints, maxDistance) {
+  //Check degenerate cases
+  if(typeof maxDistance === "number") {
+    if(maxDistance < 0) {
+      return []
+    }
+  } else {
+    maxDistance = Infinity
+  }
+  var n = this.length
+  if(n < 1) {
+    return []
+  }
+  if(typeof maxPoints === "number") {
+    if(maxPoints <= 0) {
+      return []
+    }
+    maxPoints = Math.min(maxPoints, n)|0
+  } else {
+    maxPoints = n
+  }
+  var ids = this.ids
+
+  var d = this.dimension
+  var points = this.points
+  var pointData = points.data
+  var dataVector = pool.mallocFloat64(d)
+  
+  //List of closest points
+  var closestPoints = new KDTHeap(maxPoints, 1)
+  var cl_index = closestPoints.index
+  var cl_data = closestPoints.data
+
+  var toVisit = new KDTHeap(n, d+1)
+  var index = toVisit.index
+  var data = toVisit.data
+  index[0] = 0
+  for(var i=0; i<=d; ++i) {
+    data[i] = 0
+  }
+  toVisit.count += 1
+
+  var nearest = -1
+  var nearestD = maxDistance
+
+  while(toVisit.count > 0) {
+    if(data[0] >= nearestD) {
+      break
+    }
+
+    var idx = index[0]
+    var pidx = points.index(idx, 0)
+    var d2 = 0.0
+    for(var i=0; i<d; ++i) {
+      d2 += Math.pow(point[i]-pointData[pidx+i], 2)
+    }
+    if(d2 < nearestD) {
+      if(closestPoints.count >= maxPoints) {
+        closestPoints.pop()
+      }
+      var pcount = closestPoints.count
+      cl_index[pcount] = idx
+      cl_data[pcount] = -d2
+      closestPoints.push()
+      if(closestPoints.count >= maxPoints) {
+        nearestD = -cl_data[0]
+      }
+    }
+
+    //Compute distance bounds for children
+    var k = bits.log2(idx+1)%d
+    var ds = 0
+    for(var i=0; i<d; ++i) {
+      var dd = data[i+1]
+      if(i !== k) {
+        ds += dd
+      }
+      dataVector[i] = dd
+    }
+    var qk = point[k]
+    var pk = pointData[pidx+k]
+    var dk = dataVector[k]
+    var lk = dk
+    var hk = dk
+    if(qk < pk) {
+      hk = Math.max(dk, Math.pow(pk - qk, 2))
+    } else {
+      lk = Math.max(dk, Math.pow(pk - qk, 2))
+    }
+    var d2l = lk + ds
+    var d2h = hk + ds
+
+    toVisit.pop()
+    if(d2l < nearestD) {
+      var left = 2 * idx + 1
+      if(left < n) {
+        var vcount = toVisit.count
+        index[vcount] = left
+        var vptr = vcount * (d+1)
+        data[vptr] = d2l
+        for(var i=1; i<=d; ++i) {
+          data[vptr+i] = dataVector[i-1]
+        }
+        data[vptr+k+1] = lk
+        toVisit.push()
+      }
+    }
+    if(d2h < nearestD) {
+      var right = 2 * (idx + 1)
+      if(right < n) {
+        var vcount = toVisit.count
+        index[vcount] = right
+        var vptr = vcount * (d+1)
+        data[vptr] = d2h
+        for(var i=1; i<=d; ++i) {
+          data[vptr+i] = dataVector[i-1]
+        }
+        data[vptr+k+1] = hk
+        toVisit.push()
+      }
+    }
+  }
+
+  pool.freeFloat64(dataVector)
+  toVisit.dispose()
+
+  //Sort result
+  var result = new Array(closestPoints.count)
+  var ids = this.ids
+  for(var i=closestPoints.count-1; i>=0; --i) {
+    result[i] = ids[cl_index[0]]
+    closestPoints.pop()
+  }
+  closestPoints.dispose()
+
+  return result
+}
+
+proto.dispose = function kdtDispose() {
+  pool.free(this.points.data)
+  pool.freeInt32(this.ids)
+  this.points = null
+  this.ids = null
+  this.length = 0
+}
+
+function createKDTree(points) {
+  var n, d, indexed
+  if(Array.isArray(points)) {
+    n = points.length
+    if(n === 0) {
+      return new KDTree(null, null, 0, 0)
+    }
+    d = points[0].length
+    indexed = ndarray(pool.mallocDouble(n*(d+1)), [n, d+1])
+    pack(points, indexed.hi(n, d))
+  } else {
+    n = points.shape[0]
+    d = points.shape[1]
+
+    //Round up data type size
+    var type = points.dtype
+    if(type === "int8" ||
+       type === "int16" ||
+       type === "int32" ) {
+      type = "int32"
+    } else if(type === "uint8" ||
+      type === "uint8_clamped" ||
+      type === "buffer" ||
+      type === "uint16" ||
+      type === "uint32") {
+      type = "uint32"
+    } else if(type === "float32") {
+      type = "float32"
+    } else {
+      type = "float64"
+    }
+    indexed = ndarray(pool.malloc(n*(d+1)), [n, d+1])
+    ops.assign(indexed.hi(n,d), points)
+  }
+  for(var i=0; i<n; ++i) {
+    indexed.set(i, d, i)
+  }
+
+  var pointArray = ndscratch.malloc([n, d], points.dtype)
+  var indexArray = pool.mallocInt32(n)
+  var pointer = 0
+  var pointData = pointArray.data
+  var arrayData = indexed.data
+  var l2_n = bits.log2(bits.nextPow2(n))
+
+  var sel_cmp = ndselect.compile(indexed.order, true, indexed.dtype)
+
+  //Walk tree in level order
+  var toVisit = [indexed]
+  while(pointer < n) {
+    var head = toVisit.shift()
+    var array = head
+    var nn = array.shape[0]|0
+    
+    //Find median
+    if(nn > 1) {
+      var k = bits.log2(pointer+1)%d
+      var median
+      var n_2 = inorderTree.root(nn)
+      median = sel_cmp(array, n_2, function(a,b) {
+        return a.get(k) - b.get(k)
+      })
+
+      //Copy into new array
+      var pptr = pointArray.index(pointer, 0)
+      var mptr = median.offset
+      for(var i=0; i<d; ++i) {
+        pointData[pptr++] = arrayData[mptr++]
+      }
+      indexArray[pointer] = arrayData[mptr]
+      pointer += 1
+
+      //Queue new items
+      toVisit.push(array.hi(n_2))
+      if(nn > 2) {
+        toVisit.push(array.lo(n_2+1))
+      }
+    } else {
+      //Copy into new array
+      var mptr = array.offset
+      var pptr = pointArray.index(pointer, 0)
+      for(var i=0; i<d; ++i) {
+        pointData[pptr+i] = arrayData[mptr++]
+      }
+      indexArray[pointer] = arrayData[mptr]
+      pointer += 1
+    }
+  }
+
+  //Release indexed
+  pool.free(indexed.data)
+
+  return new KDTree(pointArray, indexArray, n, d)
+}
+
+function deserializeKDTree(data) {
+  var points = data.p
+  var ids = data.i
+  if(points) {
+    var nd = points.length
+    var pointArray = pool.mallocFloat64(nd)
+    for(var i=0; i<nd; ++i) {
+      pointArray[i] = points[i]
+    }
+    var n = ids.length
+    var idArray = pool.mallocInt32(n)
+    for(var i=0; i<n; ++i) {
+      idArray[i] = ids[i]
+    }
+    var d = (nd/n)|0
+    return new KDTree(
+      ndarray(pointArray, [n,d]),
+      idArray,
+      n,
+      d)
+  } else {
+    return new KDTree(null, null, 0, data.d)
+  }
+}
+},{"./lib/heap.js":4,"bit-twiddle":5,"inorder-tree-layout":6,"ndarray":21,"ndarray-ops":8,"ndarray-pack":13,"ndarray-scratch":19,"ndarray-select":20,"typedarray-pool":24}]},{},[])("static-kdtree")
+});
 DirectedGraph = (function() {
 'use strict';
 
@@ -109440,9 +119940,9 @@ var RealtimeTrafficData = {};
 //      occupancies: <Object>?,   // map link ids -> occupancy
 //    },
 //  }
-RealtimeTrafficData.createFetchDataPromise = function() {
+RealtimeTrafficData.createFetchDataPromise = function(options) {
   // Fetch links network
-  var fetchLinks = createFetchLinksPromise();
+  var fetchLinks = createFetchLinksPromise(options);
 
   // Simplify network
   var simplify = createSimplifyPromise(fetchLinks);
@@ -109486,21 +119986,92 @@ function createSimplifyPromise(fetchLinks) {
     while(maxResolution < 800) {
       rv.push({
         minResolution: minResolution, maxResolution: maxResolution,
-        graph: G, tree: graphToTree(G),
+        graph: G,
+        tree: graphToTree(G),
       });
 
       minResolution = maxResolution;
       maxResolution = maxResolution * 3;
-      G = G.copy().simplify(8 * maxResolution);
+      G = G.copy().simplify(30 * minResolution);
     }
 
     rv.push({
-      minResolution: minResolution, graph: G, tree: graphToTree(G),
+      minResolution: minResolution,
+      graph: G,
+      tree: graphToTree(G),
     });
 
     return rv;
   });
-};
+}
+
+function inflate(G, dist) {
+  // Form an array of node locations and an array of node ids
+  var locs = [], ids = [];
+  G.getNodes().forEach(function(n) {
+    locs.push(n.data.pos); ids.push(n.id);
+  });
+
+  var tree = createKDTree(locs),  // Create a kd-tree
+      clusters = [],              // List of clusters
+      queue = [],                 // Queue of points to check
+
+      // Processed flag for each point
+      processed = locs.map(function() { return false; });
+
+  // For each point, P
+  for(var pIdx = 0; pIdx < locs.length; pIdx++) {
+    // Skip if processed
+    if(processed[pIdx]) { continue; }
+
+    // Add P to queue
+    queue = [ pIdx ];
+
+    // For each point in queue
+    for(var qIdx = 0; qIdx < queue.length; qIdx++) {
+      // Search for neighbours dist away from point qIdx
+      tree.rnn(locs[queue[qIdx]], dist, function(nIdx) {
+        // Has this point been processed? If not, add to queue
+        if(!processed[nIdx]) {
+          queue.push(nIdx);
+          processed[nIdx] = true;
+        }
+      });
+    }
+    // queue is new cluster
+    clusters.push(queue);
+  }
+  console.log(locs.length + ' nodes -> ' + clusters.length + ' clusters or max radius ' + dist);
+
+  // Project out each cluster
+  clusters.forEach(function(pIdxs) {
+    // Calculate centre of mass of cluster
+    var com = [0,0];
+    pIdxs.forEach(function(pIdx) {
+      com[0] += locs[pIdx][0];
+      com[1] += locs[pIdx][1];
+    });
+    com[0] /= pIdxs.length; com[1] /= pIdxs.length;
+
+    // project out
+    pIdxs.forEach(function(pIdx) {
+      var dx = locs[pIdx][0] - com[0], dy = locs[pIdx][1] - com[1],
+          deltaLen = Math.sqrt(dx*dx + dy*dy);
+
+      // Don't touch single-point clusters
+      if(deltaLen === 0) { return; }
+
+      var newLoc = [ com[0] + dist*dx/deltaLen, com[1] + dist*dy/deltaLen ];
+
+      if(isNaN(newLoc[0])) {
+        console.log(com, dx, dy, deltaLen, newLoc);
+      }
+      G.getNodeById(ids[pIdx]).data.pos = newLoc;
+    });
+  });
+
+  return G;
+}
 
 function createFetchTrafficDataPromise(type) {
   var url = DATA_SERVER + type + '.json';
@@ -109517,7 +120088,7 @@ function createFetchTrafficDataPromise(type) {
 function createFetchLinksPromise(options) {
   options = _extend({
     srcProjection: 'EPSG:4326', destProjection: 'EPSG:3857',
-  }, options);
+  }, options || {});
 
   return createGetJSONPromise(DATA_SERVER + 'network.json')
   .then(function(network) {
