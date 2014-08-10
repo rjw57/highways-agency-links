@@ -20,6 +20,7 @@
     "ol3-unofficial": "~3.0.0-gamma.3.upd1",
     "heap": "~0.2.3",
     "rbush": "mourner/rbush#~1.2.1",
-    "es6-promise-polyfill": "~1.0.0"
+    "es6-promise-polyfill": "~1.0.0",
+    "static-kdtree": "mikolalysenko/static-kdtree"
   }
 }
