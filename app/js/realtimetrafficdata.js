@@ -25,9 +25,9 @@ var RealtimeTrafficData = {};
 //      occupancies: <Object>?,   // map link ids -> occupancy
 //    },
 //  }
-RealtimeTrafficData.createFetchDataPromise = function() {
+RealtimeTrafficData.createFetchDataPromise = function(options) {
   // Fetch links network
-  var fetchLinks = createFetchLinksPromise();
+  var fetchLinks = createFetchLinksPromise(options);
 
   // Simplify network
   var simplify = createSimplifyPromise(fetchLinks);
@@ -173,7 +173,7 @@ function createFetchTrafficDataPromise(type) {
 function createFetchLinksPromise(options) {
   options = _extend({
     srcProjection: 'EPSG:4326', destProjection: 'EPSG:3857',
-  }, options);
+  }, options || {});
 
   return createGetJSONPromise(DATA_SERVER + 'network.json')
   .then(function(network) {

@@ -1,7 +1,14 @@
+// Teach proj4 about the British national grid
+proj4.defs("EPSG:27700",
+    "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +datum=OSGB36 +units=m +no_defs");
+
 (function() {
 'use strict';
 
 // ///// CONSTANTS /////
+
+var WGS84 = 'EPSG:4326',
+    MAP_PROJ = 'EPSG:3857';
 
 // colour scheme
 var LINK_COLOUR = tinycolor({ h: 240, s: 100, v: 75 }).toHexString(),
@@ -22,7 +29,9 @@ var LINK_COLOUR = tinycolor({ h: 240, s: 100, v: 75 }).toHexString(),
 //      occupancies: <Object>?,   // map link ids -> occupancy
 //    },
 //  }
-var fetchData = RealtimeTrafficData.createFetchDataPromise();
+var fetchData = RealtimeTrafficData.createFetchDataPromise({
+  destProjection: MAP_PROJ,
+});
 
 fetchData.then(function(v) {
   console.log('fetched data');
@@ -58,7 +67,7 @@ $(document).ready(function() {
       //}),
     ],
     view: new ol.View({
-      center: ol.proj.transform([-0.09, 51.505], 'EPSG:4326', 'EPSG:3857'),
+      center: ol.proj.transform([-0.09, 51.505], WGS84, MAP_PROJ),
       zoom: 8,
     }),
   });
@@ -73,7 +82,8 @@ $(document).ready(function() {
     map.on('postcompose', function(event) {
       var vectorContext = event.vectorContext, frameState = event.frameState,
           extent = frameState.extent, res = map.getView().getResolution(), tree, graph,
-          carLength = 30, spacing = 2*carLength*res;
+          zoomedOut = (res > 100),
+          carLength = zoomedOut ? 6 : 30, spacing;
 
       // Do we have this extent cached so we don't need to do a spatial search?
       if(!cache.extent ||
@@ -93,43 +103,60 @@ $(document).ready(function() {
         cache.visibleLinks = cache.tree.search(frameState.extent);
       }
 
-      var pointCoords = [], lineString = [], colour;
+      // Record vector and point geometries we need to draw.
+      var lineStringDraws = [];
+      var multiPointDraws = [];
+
+      // Default image style if res is too coarse
+      var circImageStyle = new ol.style.Circle({
+        fill: new ol.style.Fill({ color: [0,0,255,1] }),
+        radius: 3,
+      });
 
       cache.visibleLinks.forEach(function(link) {
         var edge = cache.graph.getEdgeById(link[4]),
+            speed = data.data.speeds[edge.data.id],
+            occupancy = data.data.occupancies[edge.data.id],
+            colour,
             p1 = cache.graph.getNodeById(edge.nodes[0]).data.pos,
             p2 = cache.graph.getNodeById(edge.nodes[1]).data.pos,
+            timeOffset = p1[0] + p2[0] + p1[1] + p2[1], // animation time offset for link
+            animationTime = frameState.time + timeOffset,
             delta = [p2[0]-p1[0], p2[1]-p1[1]],
             deltaLen = Math.sqrt(delta[0]*delta[0] + delta[1]*delta[1]),
             unitDelta = [delta[0]/deltaLen, delta[1]/deltaLen],
             rotation = Math.atan2(unitDelta[1], unitDelta[0]),
-            lambda, offset;
+            lambda, offset,
+            lineShift = [-unitDelta[1]*res*4, unitDelta[0]*res*2],
+            imageStyle = circImageStyle;
 
-        var speed = data.data.speeds[edge.data.id],
-            occupancy = data.data.occupancies[edge.data.id];
+        var pointCoords = [], lineString = [];
 
         // Do we have data for this link?
         colour = (speed === undefined) ?
           [128, 128, 128, 1] : redGreen(speed.value, 120);
-        //colour = (occupancy === undefined) ?
-        //  [128, 128, 128, 1] : redGreen(100-occupancy.value, 100);
 
-        vectorContext.setFillStrokeStyle(
-          new ol.style.Fill(),
-          new ol.style.Stroke({
-            color: colour,
-            width: 3,
-          })
-        );
+        // Special case: zero occupancy is green
+        if(occupancy && (occupancy.value === 0)) {
+          colour = redGreen(1, 1);
+        }
 
-        // draw line
-        lineString = [ p1, p2 ];
-        vectorContext.drawLineStringGeometry(new ol.geom.LineString(lineString), null);
+        // shift points a listtle
+        p1 = [p1[0] + lineShift[0], p1[1] + lineShift[1]];
+        p2 = [p2[0] + lineShift[0], p2[1] + lineShift[1]];
+
+        // draw line shifted a little
+        lineString = [p1, p2];
+        lineStringDraws.push({
+          geom: new ol.geom.LineString(lineString),
+          style: new ol.style.Stroke({ color: colour, width: 3 }),
+        });
 
         // Do we have the information for car icons?
-        if((speed !== undefined) && (occupancy !== undefined)) {
-          spacing = Math.min(10, (100/occupancy.value)) * res * carLength;
-          offset = res * (speed.value / 10) * frameState.time / 1000;
+        if((deltaLen > 2*carLength*res) && speed && occupancy && (occupancy.value > 0)) {
+          spacing = (100/occupancy.value) * res * carLength;
+          spacing = Math.min(spacing, deltaLen);
+          offset = res * (speed.value / 10) * animationTime / 1000;
           offset -= spacing * Math.floor(offset/spacing);
 
           pointCoords = [];
@@ -137,20 +164,44 @@ $(document).ready(function() {
             pointCoords.push([ p1[0] + unitDelta[0]*lambda, p1[1] + unitDelta[1]*lambda, ]);
           }
 
-          var imageStyle = new ol.style.Icon({
-              anchor: [0.5, 0.5],
-              rotation: - rotation + 0.5 * Math.PI,
-              rotateWithView: true,
-              snapToPixel: false,
-              img: imageElement,
-              scale: carLength / 100,
-              size: [50,100],
-          });
+          if(!zoomedOut) {
+            var imageStyle = new ol.style.Icon({
+                anchor: [0.5, 0.5],
+                rotation: - rotation + 0.5 * Math.PI,
+                rotateWithView: true,
+                snapToPixel: false,
+                img: imageElement,
+                scale: carLength / 100,
+                size: [50,100],
+            });
+          }
 
-          vectorContext.setImageStyle(imageStyle);
-          vectorContext.drawMultiPointGeometry(
-              new ol.geom.MultiPoint(pointCoords), null);
+          multiPointDraws.push({
+            geom: new ol.geom.MultiPoint(pointCoords),
+            style: imageStyle,
+          });
         }
+      });
+
+      // Draw vector geometry in thick first
+      vectorContext.setFillStrokeStyle(
+        new ol.style.Fill(),
+        new ol.style.Stroke({ color: 'black', width: 6 })
+      );
+      lineStringDraws.forEach(function(draw) {
+        vectorContext.drawLineStringGeometry(draw.geom, null);
+      });
+
+      // then in appropriate colour
+      lineStringDraws.forEach(function(draw) {
+        vectorContext.setFillStrokeStyle(new ol.style.Fill(), draw.style);
+        vectorContext.drawLineStringGeometry(draw.geom, null);
+      });
+
+      // then points
+      multiPointDraws.forEach(function(draw) {
+        vectorContext.setImageStyle(draw.style);
+        vectorContext.drawMultiPointGeometry(draw.geom, null);
       });
 
       map.render();
