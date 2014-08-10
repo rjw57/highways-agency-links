@@ -44,13 +44,18 @@ $(document).ready(function() {
     // renderer: ['webgl', 'canvas', 'dom'],
     layers: [
       new ol.layer.Tile({
-        //source: new ol.source.MapQuest({layer: 'osm'}),
-        source: new ol.source.BingMaps({
-          key: 'AvsuiJVtmn-zxz7hjF_DnAI7PGecNnzJFsNi7V69yd0BUdWYNlyetZblBtnRUcEI',
-          imagerySet: 'Aerial',
-          //layer: 'osm'
-        }),
+        source: new ol.source.MapQuest({layer: 'osm'}),
+        //source: new ol.source.BingMaps({
+        //  key: 'AvsuiJVtmn-zxz7hjF_DnAI7PGecNnzJFsNi7V69yd0BUdWYNlyetZblBtnRUcEI',
+        //  imagerySet: 'Aerial',
+        //  //layer: 'osm'
+        //}),
       }),
+      //new ol.layer.Tile({
+      //  source: new ol.source.XYZ({
+      //    url: '//1.tile.openweathermap.org/map/rain_cls/{z}/{x}/{y}.png',
+      //  }),
+      //}),
     ],
     view: new ol.View({
       center: ol.proj.transform([-0.09, 51.505], 'EPSG:4326', 'EPSG:3857'),
