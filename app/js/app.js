@@ -10,6 +10,9 @@ proj4.defs("EPSG:27700",
 var WGS84 = 'EPSG:4326',
     MAP_PROJ = 'EPSG:3857';
 
+// scales
+var MAX_SPEED=120, MAX_FLOW=5000, MAX_OCCUPANCY=100;
+
 // Amount to shift road segments to "left"
 var ROAD_SHIFT = 2; // pixels
 
@@ -49,6 +52,18 @@ fetchData.catch(function(err) {
 $(document).ready(function() {
   function stopLoading() { $('body').removeClass('loading'); }
   fetchData.then(stopLoading, stopLoading);
+
+  $('canvas.scale').each(function(idx, canvas) {
+    canvas.width = $(canvas).width();
+    canvas.height = $(canvas).height();
+
+    var ctx = canvas.getContext('2d'), color, dy=Math.max(1, Math.floor(canvas.height/255));
+    for(var y=0; y<canvas.height; y+=dy) {
+      color = redGreen(canvas.height-y, canvas.height);
+      ctx.fillStyle = tinycolor({r:color[0], g:color[1], b:color[2], a:color[3]}).toHexString();
+      ctx.fillRect(0, y, canvas.width, dy);
+    }
+  });
 
   // Create the base map
   var map = new ol.Map({
@@ -213,8 +228,13 @@ function createLinksCanvasElementFunction(trafficData) {
     ctx.lineWidth = 2 * resolution;
     ctx.lineCap = 'round';
     visibleLinks.forEach(function(segment) {
-      var isValid = (segment.data.speed && !segment.data.speed.interpolated);
-      var color = isValid ? redGreen(segment.data.speed.value, 120) : [128,128,128,1];
+      var isValid, color;
+
+      isValid = (segment.data.speed && !segment.data.speed.interpolated);
+      color = isValid ? redGreen(segment.data.speed.value, MAX_SPEED) : [128,128,128,1];
+//      isValid = (segment.data.flow && !segment.data.flow.interpolated);
+//      color = isValid ? heat(segment.data.flow.value, MAX_FLOW) : [128,128,128,1];
+
       ctx.strokeStyle = tinycolor(
         {r:color[0], g:color[1], b:color[2], a:color[3]}).toHexString();
 
@@ -385,10 +405,22 @@ function visibleLinksInTree(tree, extent) {
 
 // utility functions
 
-function redGreen(x, maxX) {
+function redGreen(x, maxX, reversed) {
+  if(reversed) { x = maxX - x; }
   var lambda = Math.max(0, Math.min(1, x / maxX)),
-      s = Math.sin(lambda*0.5*Math.PI);
-  return [255*(1-s*s), 255*(s*s), 0, 1];
+      r = Math.max(0, Math.min(1, 2-lambda*2)),
+      g = Math.max(0, Math.min(1, lambda*2)),
+      b = 0;
+  return [255*r, 255*g, 255*b, 1];
+}
+
+function heat(x, maxX, reversed) {
+  if(reversed) { x = maxX - x; }
+  var lambda = Math.max(0, Math.min(1, x / maxX)),
+      r = Math.min(1, lambda*3),
+      g = Math.max(0, Math.min(1, (lambda-0.33)*3)),
+      b = Math.max(0, Math.min(1, (lambda-0.66)*3));
+  return [255*r, 255*g, 255*b, 1];
 }
 
 function _extend(obj, otherObj) {

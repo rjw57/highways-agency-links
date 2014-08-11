@@ -29,16 +29,21 @@
     <div id="loadingBanner">
       <img id="loadingContent" src="throbber.gif" alt="Loading...">
     </div>
-    <div id="map" class="loadingHidden"></div>
-    <div id="statsPanel" class="loadingHidden">
-      <table>
-        <tr>
-          <td>Time:</td><td><span id="pubTime"></span></td>
-        </tr>
-        <tr>
-          <td>Roads:</td><td><span id="roadCount"></span></td>
-        </tr>
-      </table>
+    <div class="loadingHidden">
+      <div id="map"></div>
+      <div id="legend">
+        <canvas class="scale"></canvas>
+      </div>
+      <div id="statsPanel">
+        <table>
+          <tr>
+            <td>Time:</td><td><span id="pubTime"></span></td>
+          </tr>
+          <tr>
+            <td>Roads:</td><td><span id="roadCount"></span></td>
+          </tr>
+        </table>
+      </div>
     </div>
   </body>
 </html>

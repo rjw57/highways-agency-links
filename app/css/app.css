@@ -25,3 +25,13 @@
   background-color: rgba(0,0,0,0.33);
   color: white;
 }
+
+#legend {
+  position: absolute;
+  left: 10px;
+  bottom: 30px;
+}
+
+#legend .scale {
+  width: 1em; height: 10em;
+}
