@@ -157,15 +157,27 @@ function createPostComposeHandler(trafficData) {
     var vectorContext = event.vectorContext, frameState = event.frameState,
         map = event.target,
         extent = frameState.extent, res = map.getView().getResolution(), tree, graph,
-        pixelRatio = frameState.pixelRatio,
-        zoomedOut = (res/pixelRatio) > 100,
-        carLength = pixelRatio * (zoomedOut ? 6 : 30), spacing;
+        pixelRatio = frameState.pixelRatio;
+
+    var zoomedOut = res > 100,
+        carLength = zoomedOut ? 6 : 30,
+        spacing;
 
     // Do we have this extent cached so we don't need to do a spatial search?
     if(!cache || (cache.resolution != res) ||
        !cache.extent || !ol.extent.containsExtent(cache.extent, extent)) {
       console.log('creating geometry cache at resolution ' + res);
-      cache = extractVisibleSegments(trafficData, extent, res);
+
+      // The cache covers a slightly larger area then the original extent so
+      // that we don't have to do more work than necessary when dragging.
+      cache = extractVisibleSegments(trafficData,
+          [
+            extent[0] - 0.25*ol.extent.getWidth(extent),
+            extent[1] - 0.25*ol.extent.getHeight(extent),
+            extent[2] + 0.25*ol.extent.getWidth(extent),
+            extent[3] + 0.25*ol.extent.getHeight(extent),
+          ],
+          res);
     }
 
     // Default image style if res is too coarse
@@ -174,13 +186,16 @@ function createPostComposeHandler(trafficData) {
       radius: 3*pixelRatio,
     });
 
+    // amount to scale occupancy by to make perception match reality
+    var perceptionFudge = 2;
+
     cache.links.forEach(function(link) {
       var speed = link.data.speed,
           occupancy = link.data.occupancy,
           flow = link.data.flow;
 
       // Do we have the information for car icons?
-      if((link.length < 2*res*carLength) || !speed || !occupancy || (occupancy.value === 0)) {
+      if(!speed || !occupancy) {
         return;
       }
 
@@ -194,7 +209,7 @@ function createPostComposeHandler(trafficData) {
           lambda, offset;
 
       // Do we have the information for car icons?
-      spacing = (100/occupancy.value) * res * carLength;
+      spacing = (100/(perceptionFudge * occupancy.value)) * res * carLength;
       offset = res * (speed.value / 10) * animationTime / 1000;
       offset -= spacing * Math.floor(offset/spacing);
 
@@ -210,7 +225,7 @@ function createPostComposeHandler(trafficData) {
             rotateWithView: true,
             snapToPixel: false,
             img: imageElement,
-            scale: carLength / 100,
+            scale: pixelRatio * carLength / 100,
             size: [50,100],
         });
       }
