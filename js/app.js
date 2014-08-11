@@ -213,7 +213,8 @@ function createLinksCanvasElementFunction(trafficData) {
     ctx.lineWidth = 2 * resolution;
     ctx.lineCap = 'round';
     visibleLinks.forEach(function(segment) {
-      var color = segment.data.speed ? redGreen(segment.data.speed.value, 120) : [128,128,128,1];
+      var isValid = (segment.data.speed && !segment.data.speed.interpolated);
+      var color = isValid ? redGreen(segment.data.speed.value, 120) : [128,128,128,1];
       ctx.strokeStyle = tinycolor(
         {r:color[0], g:color[1], b:color[2], a:color[3]}).toHexString();
 
