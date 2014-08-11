@@ -119991,8 +119991,10 @@ function createSimplifyPromise(fetchLinks) {
       });
 
       minResolution = maxResolution;
-      maxResolution = maxResolution * 3;
-      G = G.copy().simplify(minResolution);
+      maxResolution = maxResolution * 2;
+
+      // Minimum feature size is 5 pixel at minimum resolution
+      G = G.copy().simplify(5 * minResolution);
     }
 
     rv.push({
