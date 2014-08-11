@@ -117,7 +117,7 @@ $(document).ready(function() {
     }));
 
     // Create a post-compose handler for displaying cars
-    map.on('postcompose', createPostComposeHandler(trafficData));
+    // map.on('postcompose', createPostComposeHandler(trafficData));
 
     // Re-render the map to kick of a postcompose event.
     map.render();
@@ -233,8 +233,8 @@ function createLinksCanvasElementFunction(trafficData) {
 
       isValid = (segment.data.speed && !segment.data.speed.interpolated);
       color = isValid ? redGreen(segment.data.speed.value, MAX_SPEED) : [128,128,128,1];
-//      isValid = (segment.data.flow && !segment.data.flow.interpolated);
-//      color = isValid ? heat(segment.data.flow.value, MAX_FLOW) : [128,128,128,1];
+      isValid = (segment.data.flow && !segment.data.flow.interpolated);
+      color = isValid ? heat(segment.data.flow.value, MAX_FLOW) : [128,128,128,1];
 
       ctx.strokeStyle = tinycolor(
         {r:color[0], g:color[1], b:color[2], a:color[3]}).toHexString();
