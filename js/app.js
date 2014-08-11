@@ -57,26 +57,37 @@ $(document).ready(function() {
     layers: [
       new ol.layer.Tile({
         source: new ol.source.MapQuest({layer: 'osm'}),
-        //source: new ol.source.BingMaps({
-        //  key: 'AvsuiJVtmn-zxz7hjF_DnAI7PGecNnzJFsNi7V69yd0BUdWYNlyetZblBtnRUcEI',
-        //  imagerySet: 'Aerial',
-        //  //layer: 'osm'
-        //}),
       }),
-      //new ol.layer.Tile({
-      //  source: new ol.source.XYZ({
-      //    url: '//1.tile.openweathermap.org/map/rain_cls/{z}/{x}/{y}.png',
-      //  }),
-      //}),
     ],
     view: new ol.View({
+      enableRotation: false,
+      maxZoom: 18, minZoom: 0,
       center: ol.proj.transform([-0.09, 51.505], WGS84, MAP_PROJ),
       zoom: 8,
     }),
+    controls: ol.control.defaults().extend([
+      new ol.control.ScaleLine({ units: 'imperial' }),
+    ]),
   });
 
   // Once we have data, create the map's postcompose event handler
   fetchData.then(function(data) {
+    // write some stats
+    $('#roadCount').text(data.graph.size);
+    $('#pubTime').text(data.timestamps.data.published.toLocaleString());
+
+    // Calculate entire extent
+    var boundingExtent = data.simplified[data.simplified.length-1].tree.data.bbox;
+    console.log('bounding extent', boundingExtent);
+
+    // Add control to reset zoom
+    map.addControl(new ol.control.ZoomToExtent({
+      extent: boundingExtent,
+    }));
+
+    // Zoom to extent
+    map.getView().fitExtent(boundingExtent, map.getSize());
+
     // Create an image canvas source layer for the traffic data
     map.addLayer(new ol.layer.Image({
       source: new ol.source.ImageCanvas({
@@ -190,6 +201,9 @@ function createPostComposeHandler(trafficData) {
     var perceptionFudge = 2;
 
     cache.links.forEach(function(link) {
+      // Reject too small links
+      if(link.length < res*carLength) { return; }
+
       var speed = link.data.speed,
           occupancy = link.data.occupancy,
           flow = link.data.flow;
