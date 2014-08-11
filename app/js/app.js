@@ -76,7 +76,6 @@ $(document).ready(function() {
       }),
     ],
     view: new ol.View({
-      enableRotation: false,
       maxZoom: 18, minZoom: 0,
       center: ol.proj.transform([-0.09, 51.505], WGS84, MAP_PROJ),
       zoom: 8,
