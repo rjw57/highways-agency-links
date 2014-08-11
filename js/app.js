@@ -299,13 +299,13 @@ function createPostComposeHandler(trafficData) {
 
       // HACK: pokes directly into the "private" field
       var t = animationTime * speed / 120;
-      vectorContext.context_.lineDashOffset =
-        t - ((lineWidth + dashSpacing) * Math.floor(t/(lineWidth + dashSpacing)));
+      vectorContext.context_.lineDashOffset = pixelRatio *
+        (t - ((lineWidth + dashSpacing) * Math.floor(t/(lineWidth + dashSpacing))));
 
       vectorContext.setFillStrokeStyle(null, new ol.style.Stroke({
         color: [0, 0, 255, 1],
         width: lineWidth, lineCap: 'butt',
-        lineDash: [lineWidth, dashSpacing],
+        lineDash: [pixelRatio*lineWidth, pixelRatio*dashSpacing],
       }));
       vectorContext.drawLineStringGeometry(new ol.geom.LineString(link.geom), null);
     });
