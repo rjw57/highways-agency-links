@@ -60,7 +60,7 @@ RealtimeTrafficData.createFetchDataPromise = function(options) {
       },
     };
   });
-}
+};
 
 function createSimplifyPromise(fetchLinks) {
   return fetchLinks
@@ -77,7 +77,7 @@ function createSimplifyPromise(fetchLinks) {
 
       minResolution = maxResolution;
       maxResolution = maxResolution * 3;
-      G = G.copy().simplify(30 * minResolution);
+      G = G.copy().simplify(minResolution);
     }
 
     rv.push({
