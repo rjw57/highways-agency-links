@@ -14,8 +14,8 @@ var WGS84 = 'EPSG:4326',
 var MAX_SPEED=120, MAX_FLOW=5000, MAX_OCCUPANCY=100;
 
 // Amount to shift road segments to "left"
-var ROAD_SHIFT = 3; // pixels
-var ROAD_WIDTH = 3;
+var ROAD_SHIFT = 4; // pixels
+var ROAD_WIDTH = 5;
 
 // colour scheme
 var LINK_COLOUR = tinycolor({ h: 240, s: 100, v: 75 }).toHexString(),
@@ -283,21 +283,29 @@ function createPostComposeHandler(trafficData) {
           res);
     }
 
-
     cache.links.forEach(function(link) {
       // skip links which are too small
       if(link.length < ROAD_WIDTH*res) { return; }
+      if(!link.data.speed || !link.data.flow || !link.data.occupancy) { return; }
+
+      var speed = link.data.speed.value,
+          flow = link.data.flow.value,
+          occupancy = link.data.occupancy.value;
 
       var timeOffset = link.geom[0][0] + link.geom[1][0] + link.geom[0][1] + link.geom[1][1];
       var animationTime = 4 * (frameState.time / 1000) + timeOffset;
-      var dashSpacing = Math.min(30, 100/link.data.occupancy.value);
+      var dashSpacing = Math.min(30, 100/occupancy) + 1;
+      var lineWidth = Math.max(2, Math.sqrt(flow/speed));
 
       // HACK: pokes directly into the "private" field
-      var t = animationTime * link.data.speed.value / 120;
-      vectorContext.context_.lineDashOffset = t - (dashSpacing * Math.floor(t/dashSpacing));
+      var t = animationTime * speed / 120;
+      vectorContext.context_.lineDashOffset =
+        t - ((lineWidth + dashSpacing) * Math.floor(t/(lineWidth + dashSpacing)));
 
       vectorContext.setFillStrokeStyle(null, new ol.style.Stroke({
-        color: 'blue', width: ROAD_WIDTH, lineDash: [1, dashSpacing-1],
+        color: [0, 0, 255, 1],
+        width: lineWidth, lineCap: 'butt',
+        lineDash: [lineWidth, dashSpacing],
       }));
       vectorContext.drawLineStringGeometry(new ol.geom.LineString(link.geom), null);
     });
