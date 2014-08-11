@@ -251,7 +251,7 @@ function createLinksCanvasElementFunction(trafficData) {
 
 function createPostComposeHandler(trafficData) {
   // A cache of visible links.
-  var cache;
+  var cache, cachedDraws;
 
   // The car icon image element.
   var imageElement = document.createElement('img');
@@ -281,33 +281,46 @@ function createPostComposeHandler(trafficData) {
             extent[3] + 0.25*ol.extent.getHeight(extent),
           ],
           res);
+
+      cachedDraws = [];
+
+      cache.links.forEach(function(link) {
+        // skip links which are too small
+        if(link.length < ROAD_WIDTH*res) { return; }
+        if(!link.data.speed || !link.data.flow || !link.data.occupancy) { return; }
+
+        var speed = link.data.speed.value,
+            flow = link.data.flow.value,
+            occupancy = link.data.occupancy.value;
+
+        var timeOffset = link.geom[0][0] + link.geom[1][0] + link.geom[0][1] + link.geom[1][1];
+        var dashSpacing = Math.min(30, 100/occupancy) + 1;
+        var lineWidth = Math.max(2, Math.sqrt(flow/speed));
+
+        cachedDraws.push({
+          strokeStyle: new ol.style.Stroke({
+            color: [0, 0, 255, 1],
+            width: lineWidth, lineCap: 'butt',
+            lineDash: [pixelRatio*lineWidth, pixelRatio*dashSpacing],
+          }),
+          geom: new ol.geom.LineString(link.geom),
+          dashCycle: lineWidth + dashSpacing,
+          timeOffset: timeOffset,
+          animationSpeed: speed / 50,
+        });
+      });
     }
 
-    cache.links.forEach(function(link) {
-      // skip links which are too small
-      if(link.length < ROAD_WIDTH*res) { return; }
-      if(!link.data.speed || !link.data.flow || !link.data.occupancy) { return; }
+    cachedDraws.forEach(function(draw) {
+        // HACK: pokes directly into the "private" field
+        var animationTime = 4 * (frameState.time / 1000) + draw.timeOffset;
+        var t = animationTime * draw.animationSpeed;
 
-      var speed = link.data.speed.value,
-          flow = link.data.flow.value,
-          occupancy = link.data.occupancy.value;
+        vectorContext.context_.lineDashOffset = pixelRatio *
+          ((draw.dashCycle * Math.ceil(t/draw.dashCycle)) - t);
 
-      var timeOffset = link.geom[0][0] + link.geom[1][0] + link.geom[0][1] + link.geom[1][1];
-      var animationTime = 4 * (frameState.time / 1000) + timeOffset;
-      var dashSpacing = Math.min(30, 100/occupancy) + 1;
-      var lineWidth = Math.max(2, Math.sqrt(flow/speed));
-
-      // HACK: pokes directly into the "private" field
-      var t = animationTime * speed / 50;
-      vectorContext.context_.lineDashOffset = pixelRatio *
-        (((lineWidth + dashSpacing) * Math.ceil(t/(lineWidth + dashSpacing))) - t);
-
-      vectorContext.setFillStrokeStyle(null, new ol.style.Stroke({
-        color: [0, 0, 255, 1],
-        width: lineWidth, lineCap: 'butt',
-        lineDash: [pixelRatio*lineWidth, pixelRatio*dashSpacing],
-      }));
-      vectorContext.drawLineStringGeometry(new ol.geom.LineString(link.geom), null);
+        vectorContext.setFillStrokeStyle(null, draw.strokeStyle);
+        vectorContext.drawLineStringGeometry(draw.geom, null);
     });
 
     // re-render to draw next frame
