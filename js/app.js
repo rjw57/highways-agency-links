@@ -299,7 +299,7 @@ function createPostComposeHandler(trafficData) {
       // HACK: pokes directly into the "private" field
       var t = animationTime * speed / 120;
       vectorContext.context_.lineDashOffset = pixelRatio *
-        (t - ((lineWidth + dashSpacing) * Math.floor(t/(lineWidth + dashSpacing))));
+        (((lineWidth + dashSpacing) * Math.ceil(t/(lineWidth + dashSpacing))) - t);
 
       vectorContext.setFillStrokeStyle(null, new ol.style.Stroke({
         color: [0, 0, 255, 1],
