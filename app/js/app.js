@@ -215,8 +215,9 @@ function createLinksCanvasElementFunction(trafficData) {
     );
 
     // Draw each line segment's background
-    ctx.lineWidth = (ROAD_WIDTH+2) * resolution;
+    ctx.lineWidth = (ROAD_WIDTH+4) * resolution;
     ctx.lineCap = 'round';
+    ctx.strokeStyle = '#eee';
     ctx.beginPath();
     visibleLinks.forEach(function(segment) {
       ctx.moveTo(segment.geom[0][0], segment.geom[0][1]);
@@ -297,7 +298,7 @@ function createPostComposeHandler(trafficData) {
       var lineWidth = Math.max(2, Math.sqrt(flow/speed));
 
       // HACK: pokes directly into the "private" field
-      var t = animationTime * speed / 120;
+      var t = animationTime * speed / 50;
       vectorContext.context_.lineDashOffset = pixelRatio *
         (((lineWidth + dashSpacing) * Math.ceil(t/(lineWidth + dashSpacing))) - t);
 
