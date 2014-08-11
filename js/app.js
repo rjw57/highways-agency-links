@@ -70,14 +70,19 @@ $(document).ready(function() {
     ]),
   });
 
-  // Once we have data, create the map's postcompose event handler
-  fetchData.then(function(data) {
+  // Once we have trafficData, create the map's postcompose event handler
+  fetchData.then(function(trafficData) {
     // write some stats
-    $('#roadCount').text(data.graph.size);
-    $('#pubTime').text(data.timestamps.data.published.toLocaleString());
+    $('#roadCount').text(trafficData.graph.size);
+    $('#pubTime').text(trafficData.timestamps.data.published.toLocaleString());
+
+    // interpolate missing trafficData
+    trafficData.data.speeds = interpolateData(trafficData.data.speeds, trafficData.graph);
+    trafficData.data.flows = interpolateData(trafficData.data.flows, trafficData.graph);
+    trafficData.data.occupancies = interpolateData(trafficData.data.occupancies, trafficData.graph);
 
     // Calculate entire extent
-    var boundingExtent = data.simplified[data.simplified.length-1].tree.data.bbox;
+    var boundingExtent = trafficData.simplified[trafficData.simplified.length-1].tree.data.bbox;
     console.log('bounding extent', boundingExtent);
 
     // Add control to reset zoom
@@ -91,17 +96,86 @@ $(document).ready(function() {
     // Create an image canvas source layer for the traffic data
     map.addLayer(new ol.layer.Image({
       source: new ol.source.ImageCanvas({
-        canvasFunction: createLinksCanvasElementFunction(data),
+        canvasFunction: createLinksCanvasElementFunction(trafficData),
       }),
     }));
 
     // Create a post-compose handler for displaying cars
-    map.on('postcompose', createPostComposeHandler(data));
+    map.on('postcompose', createPostComposeHandler(trafficData));
 
     // Re-render the map to kick of a postcompose event.
     map.render();
   });
 });
+
+function interpolateData(data, graph) {
+  // start with actual data filtered by age
+  var outputData = {}, now = Date.now();
+  for(var id in data) {
+    var datum = data[id];
+    // max of 1 hour old
+    if(now - datum.when < 1000*60*60*1) {
+      outputData[id] = datum;
+    }
+  }
+
+  function interpolateStep() {
+    var newData = {}, nNewData = 0;
+
+    // process each edge
+    graph.getEdges().forEach(function(edge) {
+      // if already processed, do nothing
+      if(outputData[edge.data.id]) { return; }
+
+      // get the source and target nodes
+      var srcNode = graph.getNodeById(edge.nodes[0]),
+          tgtNode = graph.getNodeById(edge.nodes[1]);
+
+      // get all data for neighbouring edges
+
+      var neighbouringData = [];
+      [].concat(
+        graph.nodeEdges(srcNode.id),
+        graph.nodeEdges(tgtNode.id)
+      ).forEach(function(neighbourEdgeId) {
+        if(neighbourEdgeId === edge.id) { return; }
+        var neighbourEdge = graph.getEdgeById(neighbourEdgeId),
+            neighbourEdgeData = outputData[neighbourEdge.data.id];
+        if(!neighbourEdgeData) { return; }
+        neighbouringData.push(neighbourEdgeData);
+      });
+
+      // don't do anything if we've got no neighbouring data
+      if(neighbouringData.length === 0) { return; }
+
+      // construct mean of data
+      var mean = neighbouringData.reduce(
+          function(prev, cur) { return prev + cur.value ;},
+          0
+      );
+      mean /= neighbouringData.length;
+      console.assert(!isNaN(mean), mean);
+
+      // construct new data
+      newData[edge.data.id] = {
+        value: mean,
+        interpolated: true,
+      };
+      nNewData += 1;
+    });
+
+    // add new data to output
+    outputData = _extend(outputData, newData);
+
+    return nNewData;
+  }
+
+  do {
+    // ... interpolate ...
+  } while(interpolateStep() > 0);
+
+  return outputData;
+}
 
 function createLinksCanvasElementFunction(trafficData) {
   return function(extent, resolution, pixelRatio, imageSize, projection) {
@@ -202,7 +276,7 @@ function createPostComposeHandler(trafficData) {
 
     cache.links.forEach(function(link) {
       // Reject too small links
-      if(link.length < res*carLength) { return; }
+      //if(link.length < res*carLength) { return; }
 
       var speed = link.data.speed,
           occupancy = link.data.occupancy,
