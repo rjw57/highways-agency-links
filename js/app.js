@@ -289,10 +289,10 @@ function createPostComposeHandler(trafficData) {
       var animationTime = 4 * (frameState.time / 1000) + timeOffset;
 
       // HACK: pokes directly into the "private" field
-      vectorContext.context_.lineDashOffset = animationTime - (11 * Math.floor(animationTime/11));
+      vectorContext.context_.lineDashOffset = animationTime - (pixelRatio*11 * Math.floor(animationTime/(pixelRatio*11)));
 
       vectorContext.setFillStrokeStyle(null, new ol.style.Stroke({
-        color: 'blue', width: ROAD_WIDTH, lineDash: [1, 10],
+        color: 'blue', width: ROAD_WIDTH, lineDash: [pixelRatio, pixelRatio*10],
       }));
       vectorContext.drawLineStringGeometry(new ol.geom.LineString(link.geom), null);
     });
