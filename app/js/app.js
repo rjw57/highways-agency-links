@@ -77,130 +77,17 @@ $(document).ready(function() {
 
   // Once we have data, create the map's postcompose event handler
   fetchData.then(function(data) {
-    // Create an image canvas source for the traffic data
-    var linksSource = new ol.source.ImageCanvas({
-      canvasFunction: createLinksCanvasElementFunction(data),
-    });
-
+    // Create an image canvas source layer for the traffic data
     map.addLayer(new ol.layer.Image({
-      source: linksSource,
+      source: new ol.source.ImageCanvas({
+        canvasFunction: createLinksCanvasElementFunction(data),
+      }),
     }));
 
-    var cache = {};
+    // Create a post-compose handler for displaying cars
+    map.on('postcompose', createPostComposeHandler(data));
 
-    var imageElement = document.createElement('img');
-    imageElement.src = 'img/car-blue.png';
-
-
-    map.on('postcompose', function(event) {
-      // Don't do anything if we're animating the map
-      if(event.frameState.animate) { return; }
-
-      var vectorContext = event.vectorContext, frameState = event.frameState,
-          extent = frameState.extent, res = map.getView().getResolution(), tree, graph,
-          zoomedOut = (res > 100),
-          carLength = zoomedOut ? 6 : 30, spacing;
-
-      // Do we have this extent cached so we don't need to do a spatial search?
-      if(!cache.extent ||
-          (extent[0] !== cache.extent[0]) || (extent[1] !== cache.extent[1]) ||
-          (extent[2] !== cache.extent[2]) || (extent[3] !== cache.extent[3]))
-      {
-        console.log('creating geometry cache at resolution ' + res);
-
-        cache.extent = extent;
-        cache.tree = null; cache.graph = null;
-
-        data.simplified.forEach(function(n) {
-          if(n.minResolution && (res < n.minResolution)) { return; }
-          if(n.maxResolution && (res > n.maxResolution)) { return; }
-          cache.tree = n.tree; cache.graph = n.graph;
-        });
-
-        if(!cache.tree || !cache.graph) { return; }
-        cache.visibleLinks = cache.tree.search(frameState.extent);
-      }
-
-      // Record point geometries we need to draw.
-      var multiPointDraws = [];
-
-      // Default image style if res is too coarse
-      var circImageStyle = new ol.style.Circle({
-        fill: new ol.style.Fill({ color: [0,0,255,1] }),
-        radius: 3,
-      });
-
-      cache.visibleLinks.forEach(function(link) {
-        var edge = cache.graph.getEdgeById(link[4]),
-            speed = data.data.speeds[edge.data.id],
-            occupancy = data.data.occupancies[edge.data.id],
-            colour,
-            p1 = cache.graph.getNodeById(edge.nodes[0]).data.pos,
-            p2 = cache.graph.getNodeById(edge.nodes[1]).data.pos,
-            timeOffset = p1[0] + p2[0] + p1[1] + p2[1], // animation time offset for link
-            animationTime = frameState.time + timeOffset,
-            delta = [p2[0]-p1[0], p2[1]-p1[1]],
-            deltaLen = Math.sqrt(delta[0]*delta[0] + delta[1]*delta[1]),
-            unitDelta = [delta[0]/deltaLen, delta[1]/deltaLen],
-            rotation = Math.atan2(unitDelta[1], unitDelta[0]),
-            lambda, offset,
-            lineShift = [-unitDelta[1]*res*ROAD_SHIFT, unitDelta[0]*res*ROAD_SHIFT],
-            imageStyle = circImageStyle;
-
-        var pointCoords = [], lineString = [];
-
-        // Do we have data for this link?
-        colour = (speed === undefined) ?
-          [128, 128, 128, 1] : redGreen(speed.value, 120);
-
-        // Special case: zero occupancy is green
-        if(occupancy && (occupancy.value === 0)) {
-          colour = redGreen(1, 1);
-        }
-
-        // shift points a little
-        p1 = [p1[0] + lineShift[0], p1[1] + lineShift[1]];
-        p2 = [p2[0] + lineShift[0], p2[1] + lineShift[1]];
-
-        // Do we have the information for car icons?
-        if((deltaLen > 2*carLength*res) && speed && occupancy && (occupancy.value > 0)) {
-          spacing = (100/occupancy.value) * res * carLength;
-          spacing = Math.min(spacing, deltaLen);
-          offset = res * (speed.value / 10) * animationTime / 1000;
-          offset -= spacing * Math.floor(offset/spacing);
-
-          pointCoords = [];
-          for(lambda = offset; lambda < deltaLen; lambda += spacing) {
-            pointCoords.push([ p1[0] + unitDelta[0]*lambda, p1[1] + unitDelta[1]*lambda, ]);
-          }
-
-          if(!zoomedOut) {
-            imageStyle = new ol.style.Icon({
-                anchor: [0.5, 0.5],
-                rotation: - rotation + 0.5 * Math.PI,
-                rotateWithView: true,
-                snapToPixel: false,
-                img: imageElement,
-                scale: carLength / 100,
-                size: [50,100],
-            });
-          }
-
-          multiPointDraws.push({
-            geom: new ol.geom.MultiPoint(pointCoords),
-            style: imageStyle,
-          });
-        }
-      });
-
-      // then points
-      multiPointDraws.forEach(function(draw) {
-        vectorContext.setImageStyle(draw.style);
-        vectorContext.drawMultiPointGeometry(draw.geom, null);
-      });
-
-      map.render();
-    });
+    // Re-render the map to kick of a postcompose event.
     map.render();
   });
 });
@@ -249,8 +136,8 @@ function createLinksCanvasElementFunction(trafficData) {
 
     // setup canvas to accept raw projection co-ordinates
     ctx.transform(
-        1/resolution, 0, 0, -1/resolution,
-        -extent[0]/resolution, extent[3]/resolution
+        pixelRatio/resolution, 0, 0, -pixelRatio/resolution,
+        -pixelRatio*extent[0]/resolution, pixelRatio*extent[3]/resolution
     );
 
     // Draw each line segment's background
@@ -278,6 +165,128 @@ function createLinksCanvasElementFunction(trafficData) {
     });
 
     return canvas;
+  };
+}
+
+function createPostComposeHandler(trafficData) {
+  // A cache of visible links, etc.
+  var cache = {};
+
+  // The car icon image element.
+  var imageElement = document.createElement('img');
+  imageElement.src = 'img/car-blue.png';
+
+  return function(event) {
+    // Don't do anything if we're animating the map
+    if(event.frameState.animate) { return; }
+
+    var vectorContext = event.vectorContext, frameState = event.frameState,
+        map = event.target,
+        extent = frameState.extent, res = map.getView().getResolution(), tree, graph,
+        pixelRatio = frameState.pixelRatio,
+        zoomedOut = (res/pixelRatio) > 100,
+        carLength = pixelRatio * (zoomedOut ? 6 : 30), spacing;
+
+    // Do we have this extent cached so we don't need to do a spatial search?
+    if(!cache.extent ||
+        (extent[0] !== cache.extent[0]) || (extent[1] !== cache.extent[1]) ||
+        (extent[2] !== cache.extent[2]) || (extent[3] !== cache.extent[3]))
+    {
+      console.log('creating geometry cache at resolution ' + res);
+
+      cache.extent = extent;
+      cache.tree = null; cache.graph = null;
+
+      trafficData.simplified.forEach(function(n) {
+        if(n.minResolution && (res < n.minResolution)) { return; }
+        if(n.maxResolution && (res > n.maxResolution)) { return; }
+        cache.tree = n.tree; cache.graph = n.graph;
+      });
+
+      if(!cache.tree || !cache.graph) { return; }
+      cache.visibleLinks = cache.tree.search(frameState.extent);
+    }
+
+    // Record point geometries we need to draw.
+    var multiPointDraws = [];
+
+    // Default image style if res is too coarse
+    var circImageStyle = new ol.style.Circle({
+      fill: new ol.style.Fill({ color: [0,0,255,1] }),
+      radius: 3*pixelRatio,
+    });
+
+    cache.visibleLinks.forEach(function(link) {
+      var edge = cache.graph.getEdgeById(link[4]),
+          speed = trafficData.data.speeds[edge.data.id],
+          occupancy = trafficData.data.occupancies[edge.data.id],
+          colour,
+          p1 = cache.graph.getNodeById(edge.nodes[0]).data.pos,
+          p2 = cache.graph.getNodeById(edge.nodes[1]).data.pos,
+          timeOffset = p1[0] + p2[0] + p1[1] + p2[1], // animation time offset for link
+          animationTime = frameState.time + timeOffset,
+          delta = [p2[0]-p1[0], p2[1]-p1[1]],
+          deltaLen = Math.sqrt(delta[0]*delta[0] + delta[1]*delta[1]),
+          unitDelta = [delta[0]/deltaLen, delta[1]/deltaLen],
+          rotation = Math.atan2(unitDelta[1], unitDelta[0]),
+          lambda, offset,
+          lineShift = [-unitDelta[1]*res*ROAD_SHIFT, unitDelta[0]*res*ROAD_SHIFT],
+          imageStyle = circImageStyle;
+
+      var pointCoords = [], lineString = [];
+
+      // Do we have data for this link?
+      colour = (speed === undefined) ?
+        [128, 128, 128, 1] : redGreen(speed.value, 120);
+
+      // Special case: zero occupancy is green
+      if(occupancy && (occupancy.value === 0)) {
+        colour = redGreen(1, 1);
+      }
+
+      // shift points a little
+      p1 = [p1[0] + lineShift[0], p1[1] + lineShift[1]];
+      p2 = [p2[0] + lineShift[0], p2[1] + lineShift[1]];
+
+      // Do we have the information for car icons?
+      if((deltaLen > 2*carLength*res) && speed && occupancy && (occupancy.value > 0)) {
+        spacing = (100/occupancy.value) * res * carLength;
+        spacing = Math.min(spacing, deltaLen);
+        offset = res * (speed.value / 10) * animationTime / 1000;
+        offset -= spacing * Math.floor(offset/spacing);
+
+        pointCoords = [];
+        for(lambda = offset; lambda < deltaLen; lambda += spacing) {
+          pointCoords.push([ p1[0] + unitDelta[0]*lambda, p1[1] + unitDelta[1]*lambda, ]);
+        }
+
+        if(!zoomedOut) {
+          imageStyle = new ol.style.Icon({
+              anchor: [0.5, 0.5],
+              rotation: - rotation + 0.5 * Math.PI,
+              rotateWithView: true,
+              snapToPixel: false,
+              img: imageElement,
+              scale: carLength / 100,
+              size: [50,100],
+          });
+        }
+
+        multiPointDraws.push({
+          geom: new ol.geom.MultiPoint(pointCoords),
+          style: imageStyle,
+        });
+      }
+    });
+
+    // then points
+    multiPointDraws.forEach(function(draw) {
+      vectorContext.setImageStyle(draw.style);
+      vectorContext.drawMultiPointGeometry(draw.geom, null);
+    });
+
+    // re-render to draw next frame
+    map.render();
   };
 }
 
