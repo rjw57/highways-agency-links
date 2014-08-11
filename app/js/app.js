@@ -109,8 +109,15 @@ $(document).ready(function() {
 });
 
 function interpolateData(data, graph) {
-  // start with actual data
-  var outputData = _extend({}, data);
+  // start with actual data filtered by age
+  var outputData = {}, now = Date.now();
+  for(var id in data) {
+    var datum = data[id];
+    // max of 1 hour old
+    if(now - datum.when < 1000*60*60*1) {
+      outputData[id] = datum;
+    }
+  }
 
   function interpolateStep() {
     var newData = {}, nNewData = 0;
@@ -269,7 +276,7 @@ function createPostComposeHandler(trafficData) {
 
     cache.links.forEach(function(link) {
       // Reject too small links
-      if(link.length < res*carLength) { return; }
+      //if(link.length < res*carLength) { return; }
 
       var speed = link.data.speed,
           occupancy = link.data.occupancy,
