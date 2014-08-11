@@ -117,7 +117,7 @@ $(document).ready(function() {
     }));
 
     // Create a post-compose handler for displaying cars
-    // map.on('postcompose', createPostComposeHandler(trafficData));
+    map.on('postcompose', createPostComposeHandler(trafficData));
 
     // Re-render the map to kick of a postcompose event.
     map.render();
@@ -233,8 +233,8 @@ function createLinksCanvasElementFunction(trafficData) {
 
       isValid = (segment.data.speed && !segment.data.speed.interpolated);
       color = isValid ? redGreen(segment.data.speed.value, MAX_SPEED) : [128,128,128,1];
-      isValid = (segment.data.flow && !segment.data.flow.interpolated);
-      color = isValid ? heat(segment.data.flow.value, MAX_FLOW) : [128,128,128,1];
+//      isValid = (segment.data.flow && !segment.data.flow.interpolated);
+//      color = isValid ? heat(segment.data.flow.value, MAX_FLOW) : [128,128,128,1];
 
       ctx.strokeStyle = tinycolor(
         {r:color[0], g:color[1], b:color[2], a:color[3]}).toHexString();
@@ -285,14 +285,19 @@ function createPostComposeHandler(trafficData) {
 
 
     cache.links.forEach(function(link) {
+      // skip links which are too small
+      if(link.length < ROAD_WIDTH*res) { return; }
+
       var timeOffset = link.geom[0][0] + link.geom[1][0] + link.geom[0][1] + link.geom[1][1];
       var animationTime = 4 * (frameState.time / 1000) + timeOffset;
+      var dashSpacing = Math.min(30, 100/link.data.occupancy.value);
 
       // HACK: pokes directly into the "private" field
-      vectorContext.context_.lineDashOffset = animationTime - (pixelRatio*11 * Math.floor(animationTime/(pixelRatio*11)));
+      var t = animationTime * link.data.speed.value / 120;
+      vectorContext.context_.lineDashOffset = t - (dashSpacing * Math.floor(t/dashSpacing));
 
       vectorContext.setFillStrokeStyle(null, new ol.style.Stroke({
-        color: 'blue', width: ROAD_WIDTH, lineDash: [pixelRatio, pixelRatio*10],
+        color: 'blue', width: ROAD_WIDTH, lineDash: [1, dashSpacing-1],
       }));
       vectorContext.drawLineStringGeometry(new ol.geom.LineString(link.geom), null);
     });
