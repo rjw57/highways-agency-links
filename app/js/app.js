@@ -197,6 +197,9 @@ function createPostComposeHandler(trafficData) {
     var perceptionFudge = 2;
 
     cache.links.forEach(function(link) {
+      // Reject too small links
+      if(link.length < res*carLength) { return; }
+
       var speed = link.data.speed,
           occupancy = link.data.occupancy,
           flow = link.data.flow;
