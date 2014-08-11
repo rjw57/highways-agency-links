@@ -66,9 +66,9 @@ function createSimplifyPromise(fetchLinks) {
   return fetchLinks
   .then(function(G) {
     // Create networks for various resolutions
-    var maxResolution = 30, minResolution, rv = [];
+    var maxResolution = 64, minResolution, rv = [];
 
-    while(maxResolution < 800) {
+    while(maxResolution < 2000) {
       rv.push({
         minResolution: minResolution, maxResolution: maxResolution,
         graph: G,
@@ -78,8 +78,8 @@ function createSimplifyPromise(fetchLinks) {
       minResolution = maxResolution;
       maxResolution = maxResolution * 2;
 
-      // Minimum feature size is 5 pixel at minimum resolution
-      G = G.copy().simplify(5 * minResolution);
+      // Minimum feature size is 15 pixels at minimum resolution
+      G = G.copy().simplify(15 * minResolution);
     }
 
     rv.push({
