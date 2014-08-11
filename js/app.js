@@ -14,7 +14,8 @@ var WGS84 = 'EPSG:4326',
 var MAX_SPEED=120, MAX_FLOW=5000, MAX_OCCUPANCY=100;
 
 // Amount to shift road segments to "left"
-var ROAD_SHIFT = 2; // pixels
+var ROAD_SHIFT = 3; // pixels
+var ROAD_WIDTH = 3;
 
 // colour scheme
 var LINK_COLOUR = tinycolor({ h: 240, s: 100, v: 75 }).toHexString(),
@@ -215,7 +216,7 @@ function createLinksCanvasElementFunction(trafficData) {
     );
 
     // Draw each line segment's background
-    ctx.lineWidth = 5 * resolution;
+    ctx.lineWidth = (ROAD_WIDTH+2) * resolution;
     ctx.lineCap = 'round';
     ctx.beginPath();
     visibleLinks.forEach(function(segment) {
@@ -225,7 +226,7 @@ function createLinksCanvasElementFunction(trafficData) {
     ctx.stroke();
 
     // Draw each line segment appropriately coloured
-    ctx.lineWidth = 2 * resolution;
+    ctx.lineWidth = ROAD_WIDTH * resolution;
     ctx.lineCap = 'round';
     visibleLinks.forEach(function(segment) {
       var isValid, color;
@@ -265,10 +266,6 @@ function createPostComposeHandler(trafficData) {
         extent = frameState.extent, res = map.getView().getResolution(), tree, graph,
         pixelRatio = frameState.pixelRatio;
 
-    var zoomedOut = res > 100,
-        carLength = zoomedOut ? 6 : 30,
-        spacing;
-
     // Do we have this extent cached so we don't need to do a spatial search?
     if(!cache || (cache.resolution != res) ||
        !cache.extent || !ol.extent.containsExtent(cache.extent, extent)) {
@@ -286,62 +283,18 @@ function createPostComposeHandler(trafficData) {
           res);
     }
 
-    // Default image style if res is too coarse
-    var circImageStyle = new ol.style.Circle({
-      fill: new ol.style.Fill({ color: [0,0,255,1] }),
-      radius: 3*pixelRatio,
-    });
-
-    // amount to scale occupancy by to make perception match reality
-    var perceptionFudge = 2;
 
     cache.links.forEach(function(link) {
-      // Reject too small links
-      //if(link.length < res*carLength) { return; }
+      var timeOffset = link.geom[0][0] + link.geom[1][0] + link.geom[0][1] + link.geom[1][1];
+      var animationTime = 4 * (frameState.time / 1000) + timeOffset;
 
-      var speed = link.data.speed,
-          occupancy = link.data.occupancy,
-          flow = link.data.flow;
+      // HACK: pokes directly into the "private" field
+      vectorContext.context_.lineDashOffset = animationTime - (11 * Math.floor(animationTime/11));
 
-      // Do we have the information for car icons?
-      if(!speed || !occupancy) {
-        return;
-      }
-
-      var p1 = link.geom[0], p2 = link.geom[1],
-          unitDelta = link.unitDirection,
-          rotation = Math.atan2(unitDelta[1], unitDelta[0]);
-
-      var timeOffset = p1[0] + p2[0] + p1[1] + p2[1], // animation time offset for link
-          animationTime = frameState.time + timeOffset,
-          imageStyle = circImageStyle,
-          lambda, offset;
-
-      // Do we have the information for car icons?
-      spacing = (100/(perceptionFudge * occupancy.value)) * res * carLength;
-      offset = res * (speed.value / 10) * animationTime / 1000;
-      offset -= spacing * Math.floor(offset/spacing);
-
-      var pointCoords = [];
-      for(lambda = offset; lambda < link.length; lambda += spacing) {
-        pointCoords.push([ p1[0] + unitDelta[0]*lambda, p1[1] + unitDelta[1]*lambda, ]);
-      }
-
-      if(!zoomedOut) {
-        imageStyle = new ol.style.Icon({
-            anchor: [0.5, 0.5],
-            rotation: - rotation + 0.5 * Math.PI,
-            rotateWithView: true,
-            snapToPixel: false,
-            img: imageElement,
-            scale: pixelRatio * carLength / 100,
-            size: [50,100],
-        });
-      }
-
-      vectorContext.setImageStyle(imageStyle);
-      vectorContext.drawMultiPointGeometry(
-          new ol.geom.MultiPoint(pointCoords), null);
+      vectorContext.setFillStrokeStyle(null, new ol.style.Stroke({
+        color: 'blue', width: ROAD_WIDTH, lineDash: [1, 10],
+      }));
+      vectorContext.drawLineStringGeometry(new ol.geom.LineString(link.geom), null);
     });
 
     // re-render to draw next frame
