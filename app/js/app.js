@@ -72,6 +72,10 @@ $(document).ready(function() {
 
   // Once we have data, create the map's postcompose event handler
   fetchData.then(function(data) {
+    // write some stats
+    $('#roadCount').text(data.graph.size);
+    $('#pubTime').text(data.timestamps.data.published.toLocaleString());
+
     // Calculate entire extent
     var boundingExtent = data.simplified[data.simplified.length-1].tree.data.bbox;
     console.log('bounding extent', boundingExtent);
