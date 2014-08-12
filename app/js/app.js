@@ -223,4 +223,58 @@ function showDataLayer(layerName) {
   });
 }
 
+var createRainfallLayer = new Promise(function(resolve, reject) {
+  MetOfficeData.fetchLayerUrls().then(function(data) {
+    var layerUrl, layerTime;
+    data.forEach(function(layer) {
+      if(layer.displayName !== 'Rainfall') { return; }
+      layer.urls.forEach(function(urlRecord) {
+        if(!layerTime || (urlRecord.at.Time > layerTime)) {
+          layerTime = urlRecord.at.Time;
+          layerUrl = urlRecord.url;
+        }
+      });
+    });
+
+    console.log('got rainfall layer', layerUrl, 'for', layerTime);
+
+    // create an image element for the dataset and create a canvas layer when
+    // loaded
+    var mapImage = document.createElement('img');
+    mapImage.onload = function() {
+      var imageExtent = ol.proj.transformExtent([-12, 48, 5, 61], WGS84, MAP_PROJ),
+          imageSize = [mapImage.width, mapImage.height];
+
+      console.log('Rainfall image loaded with size', imageSize, 'extent', imageExtent);
+      createMap.then(function(map) {
+        console.log('Creating rainfall layer for map');
+        resolve(new ol.layer.Image({
+          source: new ol.source.ImageCanvas({
+            canvasFunction: function(extent, resolution, pixelRatio, size, projection) {
+              var canvas = document.createElement('canvas');
+              canvas.width = size[0]; canvas.height = size[1];
+
+              var ctx = canvas.getContext('2d');
+
+              /*
+              ctx.fillStyle = 'red';
+              ctx.fillRect(0, 0, size[0], size[1]);
+              */
+
+              return canvas;
+            },
+          }),
+        }));
+      });
+    };
+    mapImage.crossOrigin = 'anonymous';
+    mapImage.src = layerUrl;
+  });
+});
+createRainfallLayer.catch(function(err) { console.log('failed to create rainfall layer', err); });
+
+Promise.all([createMap, createRainfallLayer]).then(function(values) {
+  values[0].addLayer(values[1]);
+});
+
 })();
