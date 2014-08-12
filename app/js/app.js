@@ -170,7 +170,7 @@ function updateLayerScale(scale) {
       console.log(scaleStart, scaleEnd);
 
       for(var l=0; l<scaleExtent; l+=dl) {
-        color = scale.map(scaleExtent-l, scaleExtent);
+        color = scale.map(l, scaleExtent);
         ctx.fillStyle = tinycolor({r:color[0], g:color[1], b:color[2], a:color[3]}).toHexString();
         ctx.fillRect(scaleStart + l, canvas.height - barSize, dl, barSize);
       }
