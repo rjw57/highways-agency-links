@@ -82,6 +82,7 @@ $(document).ready(function() {
     }),
     controls: ol.control.defaults().extend([
       new ol.control.ScaleLine({ units: 'imperial' }),
+      new ol.control.FullScreen(),
     ]),
   });
 
@@ -303,7 +304,7 @@ PostComposeHandler.prototype.updateCache = function(event) {
       animationSpeed: speed / 50,
     });
   });
-}
+};
 
 PostComposeHandler.prototype.handleEvent = function(event) {
   var self = this, trafficData = this.trafficData;
