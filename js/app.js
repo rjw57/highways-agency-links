@@ -25,6 +25,11 @@ var domReady = new Promise(function(resolve, reject) {
     });
     setShowMarchingAnts($('#toggleAnts').is(':checked'));
 
+    $('#toggleRainfall').change(function() {
+      setShowRainfallRadar($(this).is(':checked'));
+    });
+    setShowRainfallRadar($('#toggleRainfall').is(':checked'));
+
     $('input[name="dataLayer"]').change(function() {
       var value = $('input[name="dataLayer"]:checked').val();
       showDataLayer(value);
@@ -210,6 +215,17 @@ function setShowMarchingAnts(show) {
   });
 }
 
+function setShowRainfallRadar(show) {
+  Promise.all([createMap, createRainfallLayer]).then(function(vs) {
+    var map = vs[0], layer = vs[1];
+    if(show) {
+      map.addLayer(layer);
+    } else {
+      map.removeLayer(layer);
+    }
+  });
+}
+
 function showDataLayer(layerName) {
   createDataLayers.then(function(layers) {
     console.log('Showing', layerName, 'from', layers);
@@ -222,5 +238,70 @@ function showDataLayer(layerName) {
     updateLayerScale(selectedLayer ? selectedLayer.scale : null);
   });
 }
+
+var createRainfallLayer = new Promise(function(resolve, reject) {
+  MetOfficeData.fetchLayerUrls().then(function(data) {
+    var layerUrl, layerTime;
+    data.forEach(function(layer) {
+      if(layer.displayName !== 'Rainfall') { return; }
+      layer.urls.forEach(function(urlRecord) {
+        if(!layerTime || (urlRecord.at.Time > layerTime)) {
+          layerTime = urlRecord.at.Time;
+          layerUrl = urlRecord.url;
+        }
+      });
+    });
+
+    console.log('got rainfall layer', layerUrl, 'for', layerTime);
+
+    // create an image element for the dataset and create a canvas layer when
+    // loaded
+    var mapImage = document.createElement('img');
+    mapImage.onload = function() {
+      var imageExtent = ol.proj.transformExtent([-12, 48, 5, 61], WGS84, MAP_PROJ),
+          imageSize = [mapImage.width, mapImage.height];
+
+      console.log('Rainfall image loaded with size', imageSize, 'extent', imageExtent);
+      createMap.then(function(map) {
+        console.log('Creating rainfall layer for map');
+        resolve(new ol.layer.Image({
+          source: new ol.source.ImageCanvas({
+            canvasFunction: function(extent, resolution, pixelRatio, size, projection) {
+              var canvas = document.createElement('canvas');
+              canvas.width = size[0]; canvas.height = size[1];
+
+              var ctx = canvas.getContext('2d');
+              ctx.webkitImageSmoothingEnabled = false;
+              ctx.mozImageSmoothingEnabled = false;
+              ctx.msImageSmoothingEnabled = false;
+              ctx.imageSmoothingEnabled = false;
+
+              // setup canvas to accept raw projection co-ordinates
+              ctx.transform(
+                pixelRatio/resolution, 0, 0, -pixelRatio/resolution,
+                -pixelRatio*extent[0]/resolution, pixelRatio*extent[3]/resolution
+              );
+
+              // now convert pixel co-ordinates to projection co-ordinates
+              ctx.transform(
+                (imageExtent[2]-imageExtent[0])/imageSize[0], 0,
+                0, -(imageExtent[3]-imageExtent[1])/imageSize[1],
+                imageExtent[0], imageExtent[3]
+              );
+
+              // draw the image
+              ctx.drawImage(mapImage, 0, 0);
+
+              return canvas;
+            },
+          }),
+        }));
+      });
+    };
+    mapImage.crossOrigin = 'anonymous';
+    mapImage.src = layerUrl;
+  });
+});
+createRainfallLayer.catch(function(err) { console.log('failed to create rainfall layer', err); });
 
 })();

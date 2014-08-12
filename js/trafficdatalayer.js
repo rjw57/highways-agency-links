@@ -30,6 +30,12 @@ var newTrafficDataLayer = (function() {
       // get drawing context
       var ctx = canvas.getContext('2d');
 
+      // Attempt to set nearest-neighbour sampling
+      ctx.mozImageSmoothingEnabled = false;
+      ctx.webkitImageSmoothingEnabled = false;
+      ctx.msImageSmoothingEnabled = false;
+      ctx.imageSmoothingEnabled = false;
+
       // setup canvas to accept raw projection co-ordinates
       ctx.transform(
           pixelRatio/resolution, 0, 0, -pixelRatio/resolution,
