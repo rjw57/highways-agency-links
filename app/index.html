@@ -20,6 +20,9 @@
     <script src="js/static-kdtree.js"></script>
     <script src="js/directedgraph.js"></script>
     <script src="js/realtimetrafficdata.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/marchingants.js"></script>
+    <script src="js/trafficdatalayer.js"></script>
     <!-- endbuild -->
 
     <script src="js/app.js"></script>
@@ -36,8 +39,31 @@
       </div>
       <div id="statsPanel" class="ol-control ol-overlaycontainer">
         <div class="inner">
-          As of <span id="pubTime"></span><br/>
-          <span id="roadCount"></span> Roads
+          <input type="checkbox" id="expandStats" role="button">
+          <label for="expandStats" onclick=""><i>&nbsp;</i></label>
+          As of: <span id="pubTime"></span><br/>
+          <section>
+            Data for: <span id="roadCount"></span> links
+            <hr>
+            <ul id="layerToggle">
+              <li>
+                <input id="toggleAnts" type="checkbox" checked>
+                <label for="toggleAnts">Marching ants</label>
+              </li>
+              <li>
+                <input id="showSpeeds" type="radio" name="dataLayer" value="speed" checked>
+                <label for="showSpeeds">Speed</label>
+              </li>
+              <li>
+                <input id="showFlows" type="radio" name="dataLayer" value="flow">
+                <label for="showFlows">Traffic flow</label>
+              </li>
+              <li>
+                <input id="showOccupancies" type="radio" name="dataLayer" value="occupancy">
+                <label for="showOccupancies">Occupancy</label>
+              </li>
+            </ul>
+          </section>
         </div>
       </div>
     </div>

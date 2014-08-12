@@ -19,11 +19,11 @@
 
 #statsPanel {
   position: absolute;
-  top: 0.5em; left: 3em;
+  top: 0.5em; left: 3.5em;
 }
 
 #statsPanel .inner {
-  background-color: rgba(0,60,136,.3);
+  background-color: rgba(0,60,136,.5);
   border-radius: 4px;
   padding: 2px 0.25em;
   font-size: 1.14em;
@@ -31,6 +31,22 @@
   color: #fff;
   font-family: 'Lucida Grande',Verdana,Geneva,Lucida,Arial,Helvetica,sans-serif;
   line-height: 1.4em;
+}
+
+#expandStats { display: none; }
+[for="expandStats"] i::after {
+  content: '▶';
+  font-style: normal;
+}
+#expandStats:checked ~ [for="expandStats"] i::after {
+  content: '▼';
+}
+#expandStats ~ section { height: 0; overflow: hidden; }
+#expandStats:checked ~ section { height: auto; }
+
+#layerToggle {
+  margin: 0;
+  padding: 0;
 }
 
 #legend {
