@@ -60,6 +60,8 @@ var createMap = domReady.then(function() {
     controls: ol.control.defaults().extend([
       new ol.control.ScaleLine({ units: 'imperial' }),
       new ol.control.FullScreen(),
+      new ol.control.Control({ element: $('#legend').detach().get()[0] }),
+      new ol.control.Control({ element: $('#statsPanel').detach().get()[0] }),
     ]),
   });
 
