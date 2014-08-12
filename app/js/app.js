@@ -25,6 +25,11 @@ var domReady = new Promise(function(resolve, reject) {
     });
     setShowMarchingAnts($('#toggleAnts').is(':checked'));
 
+    $('#toggleRainfall').change(function() {
+      setShowRainfallRadar($(this).is(':checked'));
+    });
+    setShowRainfallRadar($('#toggleRainfall').is(':checked'));
+
     $('input[name="dataLayer"]').change(function() {
       var value = $('input[name="dataLayer"]:checked').val();
       showDataLayer(value);
@@ -210,6 +215,17 @@ function setShowMarchingAnts(show) {
   });
 }
 
+function setShowRainfallRadar(show) {
+  Promise.all([createMap, createRainfallLayer]).then(function(vs) {
+    var map = vs[0], layer = vs[1];
+    if(show) {
+      map.addLayer(layer);
+    } else {
+      map.removeLayer(layer);
+    }
+  });
+}
+
 function showDataLayer(layerName) {
   createDataLayers.then(function(layers) {
     console.log('Showing', layerName, 'from', layers);
@@ -287,9 +303,5 @@ var createRainfallLayer = new Promise(function(resolve, reject) {
   });
 });
 createRainfallLayer.catch(function(err) { console.log('failed to create rainfall layer', err); });
-
-Promise.all([createMap, createRainfallLayer]).then(function(values) {
-  values[0].addLayer(values[1]);
-});
 
 })();
