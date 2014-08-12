@@ -20,19 +20,6 @@ var MAX_SPEED=120, MAX_FLOW=5000, MAX_OCCUPANCY=100;
 // A promise which is resolved after the DOM is loaded and event handlers wired up.
 var domReady = new Promise(function(resolve, reject) {
   $(document).ready(function() {
-
-    $('canvas.scale').each(function(idx, canvas) {
-      canvas.width = $(canvas).width();
-      canvas.height = $(canvas).height();
-
-      var ctx = canvas.getContext('2d'), color, dy=Math.max(1, Math.floor(canvas.height/255));
-      for(var y=0; y<canvas.height; y+=dy) {
-        color = redGreen(canvas.height-y, canvas.height);
-        ctx.fillStyle = tinycolor({r:color[0], g:color[1], b:color[2], a:color[3]}).toHexString();
-        ctx.fillRect(0, y, canvas.width, dy);
-      }
-    });
-
     $('#toggleAnts').change(function() {
       setShowMarchingAnts($(this).is(':checked'));
     });
@@ -79,9 +66,7 @@ var createMap = domReady.then(function() {
   return map;
 });
 
-var fetchData = RealtimeTrafficData.createFetchDataPromise({
-  destProjection: MAP_PROJ,
-});
+var fetchData = RealtimeTrafficData.createFetchDataPromise({ destProjection: MAP_PROJ });
 fetchData.then(function(v) { console.log('fetch', v); });
 fetchData.catch(function(err) { console.log('Error fetching data', err ); });
 
@@ -108,9 +93,12 @@ var setUpInitialState = Promise.all([createMap, fetchData]).then(function(vals) 
 
 // Interpolate missing data returning new data
 var interpolateData = fetchData.then(function(trafficData) {
-  trafficData.data.speeds = graphInterpolateData(trafficData.data.speeds, trafficData.graph);
-  trafficData.data.flows = graphInterpolateData(trafficData.data.flows, trafficData.graph);
-  trafficData.data.occupancies = graphInterpolateData(trafficData.data.occupancies, trafficData.graph);
+  trafficData.data = extend(trafficData.data, {
+    speeds: graphInterpolateData(trafficData.data.speeds, trafficData.graph),
+    flows: graphInterpolateData(trafficData.data.flows, trafficData.graph),
+    occupancies: graphInterpolateData(trafficData.data.occupancies, trafficData.graph),
+  });
+
   return trafficData;
 });
 
@@ -119,12 +107,23 @@ var createDataLayers = Promise.all([createMap, fetchData]).then(function(vals) {
   var map = vals[0], trafficData = vals[1];
   console.log('create data layers on', map, trafficData);
 
-  // Create an image canvas source layer for the traffic data
-  map.addLayer(newTrafficDataLayer({
-    data: trafficData, roadShift: ROAD_SHIFT, roadWidth: ROAD_WIDTH,
-    type: 'speed', scale: { min: 0, max: MAX_SPEED, map: redGreen },
-    // type: 'flow', scale: { min: 0, max: MAX_FLOW, map: heat },
-  }));
+  var layers = [
+    { name: 'speed', scale: { min: 0, max: MAX_SPEED, map: redGreen, unit: 'km/h' } },
+    { name: 'flow', scale: { min: 0, max: MAX_FLOW, map: heat, unit: 'veh/hr' } },
+    { name: 'occupancy', scale: { min: 0, max: MAX_OCCUPANCY, map: heat, unit: '%' } },
+  ];
+
+  layers.forEach(function(l) {
+    l.layer = newTrafficDataLayer({
+      data: trafficData, roadShift: ROAD_SHIFT, roadWidth: ROAD_WIDTH,
+      type: l.name, scale: l.scale,
+    });
+
+    map.addLayer(l.layer);
+    l.layer.setVisible(false);
+  });
+
+  return layers;
 });
 
 var createMarchingAntsHandler = Promise.all([createMap, interpolateData]).then(function(vals) {
@@ -136,9 +135,7 @@ var createMarchingAntsHandler = Promise.all([createMap, interpolateData]).then(f
   var handlerFunc = pch.handleEvent.bind(pch);
   return handlerFunc;
 });
-createMarchingAntsHandler.catch(function(err) {
-  console.log('error in marching ants', err);
-});
+createMarchingAntsHandler.catch(function(err) { console.log('error in marching ants', err); });
 
 // Remove loading screen once data is fetched
 (function() {
@@ -146,6 +143,59 @@ createMarchingAntsHandler.catch(function(err) {
   fetchData.then(stopLoading, stopLoading);
 })();
 
+function updateLayerScale(scale) {
+  domReady.then(function() {
+    $('canvas.scale').each(function(idx, canvas) {
+      var noDataLabel = 'No data';
+
+      canvas.width = $(canvas).width();
+      canvas.height = $(canvas).height();
+
+      var ctx = canvas.getContext('2d'), color,
+          barSize = 15, spacing = 10, fontSize = 12;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Nothing to do other than clear the canvas if no scale
+      if(!scale) { return; }
+
+      ctx.font = fontSize + 'px sans-serif';
+      var noDataMetrics = ctx.measureText(noDataLabel),
+          scaleStart = 0, scaleEnd = canvas.width - spacing - noDataMetrics.width,
+          scaleExtent = scaleEnd - scaleStart,
+          dl=Math.max(1, Math.floor(scaleExtent/255));
+
+      console.log(scaleStart, scaleEnd);
+
+      for(var l=0; l<scaleExtent; l+=dl) {
+        color = scale.map(scaleExtent-l, scaleExtent);
+        ctx.fillStyle = tinycolor({r:color[0], g:color[1], b:color[2], a:color[3]}).toHexString();
+        ctx.fillRect(scaleStart + l, canvas.height - barSize, dl, barSize);
+      }
+
+      ctx.fillStyle = '#888';
+      ctx.fillRect(scaleExtent + spacing + 0.5*noDataMetrics.width - 0.5*barSize,
+          canvas.height - barSize, barSize, barSize);
+
+      ctx.fillStyle = 'black';
+      ctx.textBaseline = 'bottom';
+
+      ctx.textAlign = 'left';
+      ctx.fillText(noDataLabel, scaleExtent + spacing, canvas.height - barSize - 0.5*spacing);
+      ctx.fillText(scale.min, 0, canvas.height - barSize - 0.5*spacing);
+
+      ctx.textAlign = 'right';
+      ctx.fillText(scale.max, scaleExtent, canvas.height - barSize - 0.5*spacing);
+
+      ctx.textAlign = 'center';
+      ctx.fillText(scale.unit, 0.5*scaleExtent, canvas.height - barSize - 0.5*spacing);
+    }).catch(function(err) {
+      console.error('error setting scale', err);
+    });
+  });
+}
+
+// Event handlers
 function setShowMarchingAnts(show) {
   Promise.all([createMap, createMarchingAntsHandler]).then(function(vs) {
     var map = vs[0], handler = vs[1];
@@ -159,7 +209,16 @@ function setShowMarchingAnts(show) {
 }
 
 function showDataLayer(layerName) {
-  console.log('Showing', layerName);
+  createDataLayers.then(function(layers) {
+    console.log('Showing', layerName, 'from', layers);
+
+    var selectedLayer;
+    layers.forEach(function(l) {
+      l.layer.setVisible(l.name === layerName);
+      if(l.name === layerName) { selectedLayer = l; }
+    });
+    updateLayerScale(selectedLayer ? selectedLayer.scale : null);
+  });
 }
 
 })();
