@@ -20,15 +20,34 @@
       <div id="legend">
         <canvas class="scale"></canvas>
       </div>
-      <div id="statsPanel">
-        <table>
-          <tr>
-            <td>Time:</td><td><span id="pubTime"></span></td>
-          </tr>
-          <tr>
-            <td>Roads:</td><td><span id="roadCount"></span></td>
-          </tr>
-        </table>
+      <div id="statsPanel" class="ol-control ol-overlaycontainer">
+        <div class="inner">
+          <input type="checkbox" id="expandStats" role="button">
+          <label for="expandStats" onclick=""><i>&nbsp;</i></label>
+          As of: <span id="pubTime"></span><br/>
+          <section>
+            Data for: <span id="roadCount"></span> links
+            <hr>
+            <ul id="layerToggle">
+              <li>
+                <input id="toggleAnts" type="checkbox" checked>
+                <label for="toggleAnts">Marching ants</label>
+              </li>
+              <li>
+                <input id="showSpeeds" type="radio" name="dataLayer" value="speed" checked>
+                <label for="showSpeeds">Speed</label>
+              </li>
+              <li>
+                <input id="showFlows" type="radio" name="dataLayer" value="flow">
+                <label for="showFlows">Traffic flow</label>
+              </li>
+              <li>
+                <input id="showOccupancies" type="radio" name="dataLayer" value="occupancy">
+                <label for="showOccupancies">Occupancy</label>
+              </li>
+            </ul>
+          </section>
+        </div>
       </div>
     </div>
   </body>
