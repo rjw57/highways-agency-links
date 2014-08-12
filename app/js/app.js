@@ -255,11 +255,26 @@ var createRainfallLayer = new Promise(function(resolve, reject) {
               canvas.width = size[0]; canvas.height = size[1];
 
               var ctx = canvas.getContext('2d');
+              ctx.webkitImageSmoothingEnabled = false;
+              ctx.mozImageSmoothingEnabled = false;
+              ctx.msImageSmoothingEnabled = false;
+              ctx.imageSmoothingEnabled = false;
 
-              /*
-              ctx.fillStyle = 'red';
-              ctx.fillRect(0, 0, size[0], size[1]);
-              */
+              // setup canvas to accept raw projection co-ordinates
+              ctx.transform(
+                pixelRatio/resolution, 0, 0, -pixelRatio/resolution,
+                -pixelRatio*extent[0]/resolution, pixelRatio*extent[3]/resolution
+              );
+
+              // now convert pixel co-ordinates to projection co-ordinates
+              ctx.transform(
+                (imageExtent[2]-imageExtent[0])/imageSize[0], 0,
+                0, -(imageExtent[3]-imageExtent[1])/imageSize[1],
+                imageExtent[0], imageExtent[3]
+              );
+
+              // draw the image
+              ctx.drawImage(mapImage, 0, 0);
 
               return canvas;
             },
