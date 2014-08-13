@@ -229,6 +229,7 @@ function createWMTSLayers(projection) {
 
       layers[layerKey] = new ol.layer.Tile({
         source: new ol.source.WMTS({
+          crossOrigin: 'anonymous',
           url: url, projection: projection,
           layer: layerKey, format: layerSpec.format,
           style: layerSpec.styles[0], // FIXME: specify?
