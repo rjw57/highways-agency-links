@@ -7,8 +7,8 @@ proj4.defs("EPSG:27700",
 
 // ///// CONSTANTS /////
 
-var WGS84 = 'EPSG:4326',
-    MAP_PROJ = 'EPSG:3857';
+// var WGS84 = 'EPSG:4326', MAP_PROJ = 'EPSG:3857';
+var WGS84 = 'EPSG:4326', MAP_PROJ = 'EPSG:27700';
 
 // Amount to shift road segments to "left"
 var ROAD_SHIFT = 4; // pixels
@@ -44,23 +44,47 @@ var domReady = new Promise(function(resolve, reject) {
 var createMap = domReady.then(function() {
   console.log('Creating map');
 
+  // var baseMapSource = new ol.source.MapQuest({layer: 'osm'});
+
+  var resolutions = [2500, 1000, 500, 200, 100, 50, 25, 10, 5, 2, 1];
+
+  var baseMapLayer = new ol.layer.Group({
+    layers: resolutions.map(osMapLayerForResolution),
+  });
+
+  /*
+  var rainfallLayer = new ol.layer.Tile({
+    source: new ol.source.WMTS({
+      url: 'http://datapoint.metoffice.gov.uk/public/data/inspire/view/wmts' +
+        '?DIMTIME=2014-08-13T08:00:Z&KEY=' + MetOfficeData.DATAPOINT_KEY,
+      projection: MAP_PROJ,
+      layer: 'RADAR_UK_Composite_Highres',
+      style: 'Bitmap 1km Blue-Pale blue gradient 0.01 to 32mm/hr',
+      tileGrid: new ol.tilegrid.WMTS({
+        origin: [0,0],
+        resolutions: [1000,],
+        matrixIds: [0,],
+        tileSize: [256,256],
+      }),
+      params: {
+        'DIMTIME': '2014-08-13T08:00:Z',
+        'KEY': MetOfficeData.DATAPOINT_KEY,
+      },
+    }),
+  });
+*/
+
   // Create the base map
   var map = new ol.Map({
     target: 'map',
     // renderer: ['webgl', 'canvas', 'dom'],
-    layers: [
-      new ol.layer.Tile({
-        source: new ol.source.MapQuest({layer: 'osm'}),
-        //source: new ol.source.TileJSON({
-        //  url: '//api.tiles.mapbox.com/v3/mapbox.world-bright.jsonp',
-        //  crossOrigin: 'anonymous',
-        //}),
-      }),
-    ],
+    layers: [ baseMapLayer ],
     view: new ol.View({
-      maxZoom: 18, minZoom: 0,
+      // maxZoom: 18, minZoom: 0,
       center: ol.proj.transform([-0.09, 51.505], WGS84, MAP_PROJ),
-      zoom: 8,
+      projection: MAP_PROJ,
+      resolution: 1000,
+      resolutions: resolutions,
     }),
     controls: ol.control.defaults().extend([
       new ol.control.ScaleLine({ units: 'imperial' }),
@@ -303,5 +327,88 @@ var createRainfallLayer = new Promise(function(resolve, reject) {
   });
 });
 createRainfallLayer.catch(function(err) { console.log('failed to create rainfall layer', err); });
+
+function osMapLayerForResolution(resolution) {
+  var osOpenSpaceKey = 'FFF3760C96A04469E0430C6CA40A1131',
+      osOpenSpaceUrl = 'https://rjw57.github.io/',
+      extent = [0, 0, 800000, 1300000];
+
+  // What is the tile size at this resolution?
+  var tileSize = (resolution > 2) ? 200 : 250;
+
+  // What is the next heighest and lowest resolution?
+  var nextHigherRes = resolution+0.5, nextLowerRes = resolution-0.5;
+  switch(resolution) {
+    case 2500:
+      nextHigherRes = 5000; nextLowerRes = 1000;
+      break;
+    case 1000:
+      nextHigherRes = 2500; nextLowerRes = 500;
+      break;
+    case 500:
+      nextHigherRes = 1000; nextLowerRes = 200;
+      break;
+    case 200:
+      nextHigherRes = 500; nextLowerRes = 100;
+      break;
+    case 100:
+      nextHigherRes = 200; nextLowerRes = 50;
+      break;
+    case 50:
+      nextHigherRes = 100; nextLowerRes = 25;
+      break;
+    case 25:
+      nextHigherRes = 50; nextLowerRes = 10;
+      break;
+    case 10:
+      nextHigherRes = 25; nextLowerRes = 5;
+      break;
+    case 5:
+      nextHigherRes = 10; nextLowerRes = 2;
+      break;
+    case 2:
+      nextHigherRes = 5; nextLowerRes = 1;
+      break;
+    case 1:
+      nextHigherRes = 2; nextLowerRes = 0.5;
+      break;
+  }
+
+  // OSOpenSpace WMS layer code taken from http://maps.peterrobins.co.uk/files/gb.js
+  var osMapSource = new ol.source.TileWMS({
+    url: 'http://openspace.ordnancesurvey.co.uk/osmapapi/ts',
+    params: {
+      'VERSION': '1.1.1',
+      'LAYERS': '' + resolution,
+      'URL': osOpenSpaceUrl,
+      'KEY': osOpenSpaceKey,
+    },
+    attributions: [new ol.Attribution({
+      html: 'Topo maps &copy; Crown copyright and database rights ' + 
+          new Date().getFullYear() + 
+          ' <span style="white-space: nowrap;">Ordnance Survey.</span>' +
+          '&nbsp;&nbsp;<span style="white-space: nowrap;">' +
+          '<a href="http://openspace.ordnancesurvey.co.uk/openspace/developeragreement.html#enduserlicense"' +
+          'target="_blank">End User License Agreement</a></span>'
+    })],
+    logo: 'http://openspace.ordnancesurvey.co.uk/osmapapi/img_versions/img_4.0.0/OS/poweredby_free.png',
+    extent: extent,
+    crossOrigin: 'anonymous',
+    projection: 'EPSG:27700',
+    tileGrid: new ol.tilegrid.TileGrid({
+      tileSizes: [tileSize],
+      resolutions: [resolution],
+      origin: [0, 0],
+    }),
+  });
+
+  var osMapLayer = new ol.layer.Tile({
+    source: osMapSource,
+    maxResolution: nextHigherRes-0.5,
+    minResolution: nextLowerRes,
+  });
+
+  return osMapLayer;
+}
 
 })();
