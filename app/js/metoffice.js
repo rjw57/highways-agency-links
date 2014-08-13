@@ -1,6 +1,7 @@
 MetOfficeData = (function() { module = {};
 
 var DATAPOINT_KEY = 'd8997796-bcda-4bce-aff6-3b16f4cacbfd';
+module.DATAPOINT_KEY = DATAPOINT_KEY;
 
 // Return promise which is resolved with a JSON object describing the current
 // Met Office capabilities.
