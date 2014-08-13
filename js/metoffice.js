@@ -107,7 +107,6 @@ function fetchWMTSCapabilities() {
 module.fetchWMTSCapabilities = fetchWMTSCapabilities;
 
 function parseWMTSCapabilities() { return fetchWMTSCapabilities().then( function(caps) {
-  console.log('caps doc', caps);
   // wrap returned document in jQuery.
   caps = $(caps).children('Capabilities');
   var contents = caps.children('Contents');
@@ -191,7 +190,6 @@ function createWMTSLayers(projection) {
   projection = ol.proj.get(projection);
   return parseWMTSCapabilities().then( function(layerSpecs) {
     var layers = {}, layerSpec, url, params, layerTileGrid;
-    console.log(layerSpecs);
 
     for(var layerKey in layerSpecs) {
       layerSpec = layerSpecs[layerKey];
@@ -220,8 +218,6 @@ function createWMTSLayers(projection) {
         resolutions.push(2.8e-4 * tm.scaleDenominator);
       }
 
-      console.log(origins, resolutions, tileSizes, matrixIds);
-
       layerTileGrid = new ol.tilegrid.WMTS({
         origins: origins, resolutions: resolutions,
         tileSizes: tileSizes, matrixIds: matrixIds
@@ -229,6 +225,7 @@ function createWMTSLayers(projection) {
 
       layers[layerKey] = new ol.layer.Tile({
         source: new ol.source.WMTS({
+          crossOrigin: 'anonymous',
           url: url, projection: projection,
           layer: layerKey, format: layerSpec.format,
           style: layerSpec.styles[0], // FIXME: specify?
