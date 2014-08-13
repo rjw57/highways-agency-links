@@ -8,7 +8,13 @@ proj4.defs("EPSG:27700",
 // ///// CONSTANTS /////
 
 // var WGS84 = 'EPSG:4326', MAP_PROJ = 'EPSG:3857';
-var WGS84 = 'EPSG:4326', MAP_PROJ = 'EPSG:27700';
+var WGS84 = ol.proj.get('EPSG:4326'),
+    MAP_PROJ = new ol.proj.Projection({
+      code: 'EPSG:27700', extent: [65000, 2000, 660000, 1070000],
+      units: 'm',
+    });
+
+console.log('map projection', MAP_PROJ);
 
 // Amount to shift road segments to "left"
 var ROAD_SHIFT = 4; // pixels
@@ -46,39 +52,19 @@ var createMap = domReady.then(function() {
 
   // var baseMapSource = new ol.source.MapQuest({layer: 'osm'});
 
-  var resolutions = [2500, 1000, 500, 200, 100, 50, 25, 10, 5, 2, 1];
+  var resolutions = [2500, 1000, 500, 200, 100, 50, 25, 10, 5, 2, 1],
+      extent = [0, 0, 800000, 1300000];
 
   var baseMapLayer = new ol.layer.Group({
     layers: resolutions.map(osMapLayerForResolution),
+    extent: extent,
   });
-
-  /*
-  var rainfallLayer = new ol.layer.Tile({
-    source: new ol.source.WMTS({
-      url: 'http://datapoint.metoffice.gov.uk/public/data/inspire/view/wmts' +
-        '?DIMTIME=2014-08-13T08:00:Z&KEY=' + MetOfficeData.DATAPOINT_KEY,
-      projection: MAP_PROJ,
-      layer: 'RADAR_UK_Composite_Highres',
-      style: 'Bitmap 1km Blue-Pale blue gradient 0.01 to 32mm/hr',
-      tileGrid: new ol.tilegrid.WMTS({
-        origin: [0,0],
-        resolutions: [1000,],
-        matrixIds: [0,],
-        tileSize: [256,256],
-      }),
-      params: {
-        'DIMTIME': '2014-08-13T08:00:Z',
-        'KEY': MetOfficeData.DATAPOINT_KEY,
-      },
-    }),
-  });
-*/
 
   // Create the base map
   var map = new ol.Map({
     target: 'map',
     // renderer: ['webgl', 'canvas', 'dom'],
-    layers: [ baseMapLayer ],
+    layers: [ baseMapLayer, ],
     view: new ol.View({
       // maxZoom: 18, minZoom: 0,
       center: ol.proj.transform([-0.09, 51.505], WGS84, MAP_PROJ),
@@ -100,6 +86,17 @@ var createMap = domReady.then(function() {
 var fetchData = RealtimeTrafficData.createFetchDataPromise({ destProjection: MAP_PROJ });
 fetchData.then(function(v) { console.log('fetch', v); });
 fetchData.catch(function(err) { console.log('Error fetching data', err ); });
+
+// create UK rainfall layer
+var createRainfallLayer = MetOfficeData.createWMTSLayers(MAP_PROJ).then(function(layers) {
+  console.log('Created MetOffice layers', layers);
+  return layers.RADAR_UK_Composite_Highres;
+});
+createRainfallLayer.catch(function(err) {
+  console.error('Error creating MetOffice layers');
+  console.error(err.message);
+  console.error(err.stack);
+});
 
 // Initialse map view to cover extent of data and fill in the stats panel
 var setUpInitialState = Promise.all([createMap, fetchData]).then(function(vals) {
@@ -166,7 +163,8 @@ var createMarchingAntsHandler = Promise.all([createMap, interpolateData]).then(f
   var handlerFunc = pch.handleEvent.bind(pch);
   return handlerFunc;
 });
-createMarchingAntsHandler.catch(function(err) { console.log('error in marching ants', err); });
+createMarchingAntsHandler.catch(function(err) {
+  console.log('error in marching ants', err, err.stack); });
 
 // Remove loading screen once data is fetched
 (function() {
@@ -263,71 +261,6 @@ function showDataLayer(layerName) {
   });
 }
 
-var createRainfallLayer = new Promise(function(resolve, reject) {
-  MetOfficeData.fetchLayerUrls().then(function(data) {
-    var layerUrl, layerTime;
-    data.forEach(function(layer) {
-      if(layer.displayName !== 'Rainfall') { return; }
-      layer.urls.forEach(function(urlRecord) {
-        if(!layerTime || (urlRecord.at.Time > layerTime)) {
-          layerTime = urlRecord.at.Time;
-          layerUrl = urlRecord.url;
-        }
-      });
-    });
-
-    console.log('got rainfall layer', layerUrl, 'for', layerTime);
-
-    // create an image element for the dataset and create a canvas layer when
-    // loaded
-    var mapImage = document.createElement('img');
-    mapImage.onload = function() {
-      var imageExtent = ol.proj.transformExtent([-12, 48, 5, 61], WGS84, MAP_PROJ),
-          imageSize = [mapImage.width, mapImage.height];
-
-      console.log('Rainfall image loaded with size', imageSize, 'extent', imageExtent);
-      createMap.then(function(map) {
-        console.log('Creating rainfall layer for map');
-        resolve(new ol.layer.Image({
-          source: new ol.source.ImageCanvas({
-            canvasFunction: function(extent, resolution, pixelRatio, size, projection) {
-              var canvas = document.createElement('canvas');
-              canvas.width = size[0]; canvas.height = size[1];
-
-              var ctx = canvas.getContext('2d');
-              ctx.webkitImageSmoothingEnabled = false;
-              ctx.mozImageSmoothingEnabled = false;
-              ctx.msImageSmoothingEnabled = false;
-              ctx.imageSmoothingEnabled = false;
-
-              // setup canvas to accept raw projection co-ordinates
-              ctx.transform(
-                pixelRatio/resolution, 0, 0, -pixelRatio/resolution,
-                -pixelRatio*extent[0]/resolution, pixelRatio*extent[3]/resolution
-              );
-
-              // now convert pixel co-ordinates to projection co-ordinates
-              ctx.transform(
-                (imageExtent[2]-imageExtent[0])/imageSize[0], 0,
-                0, -(imageExtent[3]-imageExtent[1])/imageSize[1],
-                imageExtent[0], imageExtent[3]
-              );
-
-              // draw the image
-              ctx.drawImage(mapImage, 0, 0);
-
-              return canvas;
-            },
-          }),
-        }));
-      });
-    };
-    mapImage.crossOrigin = 'anonymous';
-    mapImage.src = layerUrl;
-  });
-});
-createRainfallLayer.catch(function(err) { console.log('failed to create rainfall layer', err); });
-
 function osMapLayerForResolution(resolution) {
   var osOpenSpaceKey = 'FFF3760C96A04469E0430C6CA40A1131',
       osOpenSpaceUrl = 'https://rjw57.github.io/',
@@ -409,6 +342,65 @@ function osMapLayerForResolution(resolution) {
   });
 
   return osMapLayer;
+}
+
+function newRainfallLayer() {
+  var rainfallLayer;
+  var extent = [0, 0, 800000, 1300000];
+  var size = ol.extent.getWidth(extent) / 256;
+
+  var resolutions = new Array(14);
+  var matrixIds = new Array(14);
+  for (var z = 0; z < 14; ++z) {
+    // generate resolutions and matrixIds arrays for this WMTS
+    resolutions[z] = size / Math.pow(2, z);
+    matrixIds[z] = z;
+  }
+
+  /*
+  rainfallLayer = new ol.layer.Tile({
+    extent: extent,
+    source: new ol.source.WMTS({
+      url: 'http://services.arcgisonline.com/arcgis/rest/' +
+          'services/Demographics/USA_Population_Density/MapServer/WMTS/',
+      layer: '0',
+      matrixSet: 'EPSG:3857',
+      format: 'image/png',
+      projection: MAP_PROJ,
+      tileGrid: new ol.tilegrid.WMTS({
+        origin: ol.extent.getTopLeft(extent),
+        resolutions: resolutions,
+        matrixIds: matrixIds,
+        tileSize: 256,
+      }),
+      style: 'default'
+    })
+  });
+  */
+
+  rainfallLayer = new ol.layer.Tile({
+    source: new ol.source.WMTS({
+      url: 'http://datapoint.metoffice.gov.uk/public/data/inspire/view/wmts' +
+        '?DIM_TIME=2013-11-20T11:15:00Z&key=' + MetOfficeData.DATAPOINT_KEY,
+      projection: MAP_PROJ,
+      format: 'image/png',
+      layer: 'RADAR_UK_Composite_Highres',
+      style: 'Bitmap 1km Blue-Pale blue gradient 0.01 to 32mm/hr',
+      matrixSet: 'EPSG:27700',
+      tileGrid: new ol.tilegrid.WMTS({
+        origin: [1393.0196, 1230275.0454],
+        resolutions: [2.8e-4 * 9344354.716796875,],
+        matrixIds: ['EPSG:27700:0',],
+        tileSize: 256,
+      }),
+      params: {
+        'DIMTIME': '2014-08-13T08:00:Z',
+        'KEY': MetOfficeData.DATAPOINT_KEY,
+      },
+    }),
+  });
+
+  return rainfallLayer;
 }
 
 })();
